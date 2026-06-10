@@ -143,6 +143,40 @@
   .layer-btn:hover { border-color: var(--cyan-dim); color: var(--text); }
   .layer-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,.08); }
 
+  /* ── RADAR CONTROLS ── */
+  #radar-panel {
+    position: fixed; bottom: 28px; left: 10px; z-index: 600;
+    background: rgba(17,21,32,.92); border: 1px solid var(--border);
+    backdrop-filter: blur(6px); width: 210px;
+  }
+  #radar-header {
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #radar-header span { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  #radar-toggle-btn {
+    background: none; border: 1px solid var(--cyan); color: var(--cyan);
+    font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; cursor: pointer;
+    transition: all .2s; letter-spacing: 1px;
+  }
+  #radar-toggle-btn:hover { background: rgba(0,212,255,.12); }
+  #radar-toggle-btn.off { border-color: var(--border); color: var(--muted); }
+  #radar-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .radar-product-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--font-head); font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 5px 8px; cursor: pointer; transition: all .15s; text-align: left;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .radar-product-btn:hover { border-color: var(--cyan-dim); color: var(--text); }
+  .radar-product-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,.08); }
+  .radar-product-btn .tag { font-size: 9px; color: var(--muted); font-family: var(--font-mono); }
+  .radar-product-btn.active .tag { color: var(--cyan-dim); }
+  #radar-opacity-row { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px; }
+  #radar-opacity-row label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; }
+  #radar-opacity { flex: 1; accent-color: var(--cyan); cursor: pointer; }
+  #radar-last-update { font-size: 9px; font-family: var(--font-mono); color: var(--muted); padding: 4px 10px 6px; border-top: 1px solid var(--border); }
+
   /* ── ADMIN PANEL ── */
   #admin-panel {
     position: fixed; top: 48px; left: 0; width: 260px; bottom: 0;
@@ -320,6 +354,30 @@
   <button class="layer-btn active" id="btn-dark" onclick="setLayer('dark')">Dark</button>
   <button class="layer-btn" id="btn-sat"  onclick="setLayer('sat')">Satellite</button>
   <button class="layer-btn" id="btn-clean" onclick="setLayer('clean')">Minimal</button>
+</div>
+
+<!-- RADAR PANEL -->
+<div id="radar-panel">
+  <div id="radar-header">
+    <span>Radar</span>
+    <button id="radar-toggle-btn" onclick="toggleRadar()">ON</button>
+  </div>
+  <div id="radar-body">
+    <button class="radar-product-btn active" data-product="N0Q" onclick="setRadarProduct(this)">
+      Base Reflectivity <span class="tag">N0Q</span>
+    </button>
+    <button class="radar-product-btn" data-product="N0C" onclick="setRadarProduct(this)">
+      Composite Reflect. <span class="tag">N0C</span>
+    </button>
+    <button class="radar-product-btn" data-product="N0U" onclick="setRadarProduct(this)">
+      Base Velocity <span class="tag">N0U</span>
+    </button>
+    <div id="radar-opacity-row">
+      <label>Opacity</label>
+      <input type="range" id="radar-opacity" min="10" max="100" value="80" oninput="setRadarOpacity(this.value)">
+    </div>
+  </div>
+  <div id="radar-last-update">Last update: —</div>
 </div>
 
 <!-- MAP -->
@@ -664,6 +722,81 @@ function updateCount() {
   document.getElementById('active-count').textContent = alerts.length;
   document.getElementById('poly-count').textContent = alerts.length;
 }
+
+// ── RADAR ──
+const RADAR_PRODUCTS = {
+  N0Q: { label: 'Base Reflectivity', url: 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0Q-0/{z}/{x}/{y}.png' },
+  N0C: { label: 'Composite Reflectivity', url: 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0C-0/{z}/{x}/{y}.png' },
+  N0U: { label: 'Base Velocity', url: 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0U-0/{z}/{x}/{y}.png' },
+};
+let radarLayer = null;
+let radarOn = true;
+let currentProduct = 'N0Q';
+let radarOpacity = 0.80;
+
+function buildRadarLayer(product) {
+  return L.tileLayer(RADAR_PRODUCTS[product].url, {
+    opacity: radarOpacity,
+    zIndex: 200,
+    tileSize: 256,
+    attribution: 'Radar: IEM RIDGE'
+  });
+}
+
+function setRadarProduct(btn) {
+  document.querySelectorAll('.radar-product-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentProduct = btn.dataset.product;
+  if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+  if (radarOn) {
+    radarLayer = buildRadarLayer(currentProduct);
+    radarLayer.addTo(map);
+  }
+  updateRadarTimestamp();
+}
+
+function toggleRadar() {
+  radarOn = !radarOn;
+  const btn = document.getElementById('radar-toggle-btn');
+  if (radarOn) {
+    btn.textContent = 'ON'; btn.classList.remove('off');
+    radarLayer = buildRadarLayer(currentProduct);
+    radarLayer.addTo(map);
+  } else {
+    btn.textContent = 'OFF'; btn.classList.add('off');
+    if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+  }
+}
+
+function setRadarOpacity(val) {
+  radarOpacity = val / 100;
+  if (radarLayer) radarLayer.setOpacity(radarOpacity);
+}
+
+function updateRadarTimestamp() {
+  const now = new Date();
+  // IEM tiles update every ~5 min; show current time rounded down to nearest 5
+  now.setMinutes(Math.floor(now.getMinutes() / 5) * 5, 0, 0);
+  const h = String(now.getUTCHours()).padStart(2,'0');
+  const m = String(now.getUTCMinutes()).padStart(2,'0');
+  document.getElementById('radar-last-update').textContent =
+    `Product: ${RADAR_PRODUCTS[currentProduct].label} · ~${h}:${m}Z`;
+}
+
+function refreshRadar() {
+  if (!radarOn || !radarLayer) return;
+  map.removeLayer(radarLayer);
+  radarLayer = buildRadarLayer(currentProduct);
+  radarLayer.addTo(map);
+  updateRadarTimestamp();
+}
+
+// init radar on load
+radarLayer = buildRadarLayer(currentProduct);
+radarLayer.addTo(map);
+updateRadarTimestamp();
+// auto-refresh every 5 minutes
+setInterval(refreshRadar, 5 * 60 * 1000);
 
 // ── BOOT ──
 loadPolygons();
