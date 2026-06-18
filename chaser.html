@@ -444,10 +444,14 @@ body::after{
   <div id="callsign-box">
     <div class="cb-logo"><span>PL</span></div>
     <h2>PLWS Chaser</h2>
-    <p>Enter your callsign to join the network</p>
+    <p>Enter your callsign &amp; network password to join</p>
     <input type="text" id="callsign-input" maxlength="12" placeholder="e.g. WX7PAL" autocomplete="off"
-      onkeydown="if(event.key==='Enter')joinNetwork()" oninput="this.value=this.value.toUpperCase()">
+      onkeydown="if(event.key==='Enter')document.getElementById('network-pw-input').focus()" oninput="this.value=this.value.toUpperCase()">
+    <input type="password" id="network-pw-input" placeholder="Network password" autocomplete="off"
+      onkeydown="if(event.key==='Enter')joinNetwork()"
+      style="width:100%;background:var(--bg);border:1px solid var(--green-dark);color:var(--green);font-family:var(--font-mono);font-size:14px;letter-spacing:1px;padding:10px 12px;outline:none;margin-bottom:8px;text-align:center;transition:border-color .2s;">
     <div id="callsign-err">Callsign required (2–12 characters)</div>
+    <div id="network-pw-err" style="font-size:11px;color:var(--red);margin-bottom:8px;text-align:center;display:none;">Incorrect network password.</div>
     <button id="callsign-submit" onclick="joinNetwork()">Join Network</button>
   </div>
 </div>
@@ -626,6 +630,7 @@ body::after{
 const SB_URL='https://gkpdnqrvddgpfyderrif.supabase.co/rest/v1';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcGRucXJ2ZGRncGZ5ZGVycmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NTU4OTgsImV4cCI6MjA5NjQzMTg5OH0.-uZRFaySmcqWo4MC9zqj4iuG121cxKWZ5VqluTUXfFU';
 const SB_HDR={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+const NETWORK_PASS='TeamPalLabs';
 const TYPE_COLORS={tornado:'#ff6b00',tstorm:'#ffcc00',flood:'#4a9eff',custom:'#cc44ff'};
 const TYPE_LABELS={tornado:'Tornado Warning',tstorm:'Severe T-Storm Warning',flood:'Flood Zone',custom:'Special Statement'};
 
@@ -953,8 +958,14 @@ map.on('click',async e=>{
 async function joinNetwork(){
   const inp=document.getElementById('callsign-input');
   const cs=inp.value.trim().toUpperCase();
-  if(cs.length<2||cs.length>12){document.getElementById('callsign-err').style.display='block';return;}
-  document.getElementById('callsign-err').style.display='none';
+  const pwInp=document.getElementById('network-pw-input');
+  const pw=pwInp.value;
+  let hasErr=false;
+  if(cs.length<2||cs.length>12){document.getElementById('callsign-err').style.display='block';hasErr=true;}
+  else{document.getElementById('callsign-err').style.display='none';}
+  if(pw!==NETWORK_PASS){document.getElementById('network-pw-err').style.display='block';hasErr=true;}
+  else{document.getElementById('network-pw-err').style.display='none';}
+  if(hasErr)return;
   document.getElementById('callsign-submit').textContent='Joining...';
   try{
     // Insert chaser row (placeholder location 0,0 — GPS will update immediately)
