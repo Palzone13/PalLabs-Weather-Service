@@ -676,11 +676,11 @@ function switchTab(name, btn) {
   // Tab-specific actions
   if(name==='radar'){
     if(radarLayer){map.removeLayer(radarLayer);}
-    renderLoopFrame(loopFrame);
+    preloadLoopFrames(loopProduct);
     document.getElementById('wx-hint').style.display='none';
   } else {
     if(typeof loopPlaying!=='undefined'&&loopPlaying)toggleLoopPlay();
-    if(typeof loopLayer!=='undefined'&&loopLayer){map.removeLayer(loopLayer);loopLayer=null;}
+    loopLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});loopLayers=[];
     if(radarOn&&!radarLayer){radarLayer=buildRadarLayer(currentProduct);radarLayer.addTo(map);}
     if(name==='alerts') document.getElementById('wx-hint').style.display='block';
     else document.getElementById('wx-hint').style.display='none';
@@ -837,30 +837,78 @@ radarLayer=buildRadarLayer(currentProduct); radarLayer.addTo(map); updateRadarTi
 setInterval(refreshRadar,5*60*1000);
 
 // ══ RADAR LOOP ══
-let loopProduct='N0Q', loopFrame=11, loopPlaying=false, loopTimer=null, loopLayer=null;
+let loopProduct='N0Q', loopFrame=11, loopPlaying=false, loopTimer=null;
 const LOOP_FRAMES=12;
-// IEM RIDGE archive URL pattern
+let loopLayers=[]; // pre-built layers, one per frame
+let loopLoaded=[]; // how many tiles have fired load event per frame
+let loopPreloading=false;
+
 function loopTileUrl(product, minsBack) {
-  // IEM archive tiles: use the time-offset version
   return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-${product}-${minsBack}/{z}/{x}/{y}.png`;
 }
 function getLoopTimeLabel(frameIdx) {
-  // frameIdx 0=oldest (~55min ago), 11=newest
   const minsAgo=(LOOP_FRAMES-1-frameIdx)*5;
   const d=new Date(Date.now()-minsAgo*60000);
   return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+'Z  ('+minsAgo+' min ago)';
 }
-function renderLoopFrame(idx) {
-  if(loopLayer){map.removeLayer(loopLayer);loopLayer=null;}
-  const minsBack=(LOOP_FRAMES-1-idx)*5;
-  loopLayer=L.tileLayer(loopTileUrl(loopProduct,minsBack),{opacity:0.75,zIndex:201,tileSize:256});
-  loopLayer.addTo(map);
+
+// Pre-build all frame layers and add them hidden; only the active one is visible
+async function preloadLoopFrames(product){
+  loopPreloading=true;
+  // tear down old layers
+  loopLayers.forEach(l=>{ try{map.removeLayer(l);}catch(e){} });
+  loopLayers=[]; loopLoaded=[];
+
+  const btn=document.getElementById('loop-play-btn');
+  btn.disabled=true; btn.textContent='Loading...';
+  document.getElementById('loop-time-display').textContent='Preloading frames…';
+
+  let loadedCount=0;
+  const total=LOOP_FRAMES;
+
+  for(let i=0;i<LOOP_FRAMES;i++){
+    const minsBack=(LOOP_FRAMES-1-i)*5;
+    const lyr=L.tileLayer(loopTileUrl(product,minsBack),{
+      opacity:0, zIndex:201, tileSize:256,
+      attribution:'Radar: IEM RIDGE'
+    });
+    lyr.addTo(map);
+    // listen for tile loads to track progress
+    lyr.on('tileload',()=>{
+      loadedCount++;
+      const pct=Math.round((loadedCount/(total*4))*100); // rough estimate ~4 tiles in view
+      document.getElementById('loop-time-display').textContent=`Preloading… ${Math.min(pct,99)}%`;
+    });
+    loopLayers.push(lyr);
+  }
+
+  // Wait a moment for tiles to start fetching, then show newest frame
+  setTimeout(()=>{
+    loopPreloading=false;
+    btn.disabled=false; btn.textContent='▶ Play';
+    showLoopFrame(LOOP_FRAMES-1);
+    document.getElementById('loop-time-display').textContent=getLoopTimeLabel(LOOP_FRAMES-1);
+    document.getElementById('loop-scrubber').value=LOOP_FRAMES-1;
+  }, 2000); // 2s gives tiles time to start loading into cache
+}
+
+function showLoopFrame(idx){
+  loopFrame=idx;
+  loopLayers.forEach((l,i)=>l.setOpacity(i===idx ? 0.75 : 0));
   document.getElementById('loop-time-display').textContent=getLoopTimeLabel(idx);
   document.getElementById('loop-scrubber').value=idx;
 }
-function scrubLoop(v){loopFrame=parseInt(v);renderLoopFrame(loopFrame);}
-function stepLoop(d){loopFrame=Math.max(0,Math.min(LOOP_FRAMES-1,loopFrame+d));renderLoopFrame(loopFrame);}
+
+function scrubLoop(v){
+  if(loopPreloading)return;
+  showLoopFrame(parseInt(v));
+}
+function stepLoop(d){
+  if(loopPreloading)return;
+  showLoopFrame(Math.max(0,Math.min(LOOP_FRAMES-1,loopFrame+d)));
+}
 function toggleLoopPlay(){
+  if(loopPreloading)return;
   loopPlaying=!loopPlaying;
   const btn=document.getElementById('loop-play-btn');
   if(loopPlaying){btn.textContent='⏸ Pause';btn.classList.add('playing');playLoopTick();}
@@ -868,14 +916,15 @@ function toggleLoopPlay(){
 }
 function playLoopTick(){
   if(!loopPlaying)return;
-  loopFrame=(loopFrame+1)%LOOP_FRAMES;
-  renderLoopFrame(loopFrame);
+  showLoopFrame((loopFrame+1)%LOOP_FRAMES);
   const spd=parseInt(document.getElementById('loop-speed').value);
   loopTimer=setTimeout(playLoopTick,spd);
 }
 function setLoopProduct(btn){
   document.querySelectorAll('.loop-pill').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  loopProduct=btn.dataset.lp; renderLoopFrame(loopFrame);
+  loopProduct=btn.dataset.lp;
+  if(loopPlaying)toggleLoopPlay();
+  preloadLoopFrames(loopProduct);
 }
 // ══ STORM REPORTS (IEM LSR) ══
 let stormMarkers=[];
