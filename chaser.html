@@ -760,6 +760,7 @@ function switchPTab(name,btn){
   document.querySelectorAll('.ptab').forEach(b=>b.classList.remove('active'));
   document.getElementById('ptab-'+name).classList.add('active');
   btn.classList.add('active');
+  if(name==='nwsspc') loadNWSWarnings();
 }
 
 // ══ RADAR ══
