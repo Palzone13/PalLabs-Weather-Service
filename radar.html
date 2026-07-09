@@ -127,6 +127,49 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #loop-speed { flex: 1; accent-color: var(--cyan); cursor: pointer; }
 #loop-frame-count { font-size: 10px; color: var(--muted); font-family: var(--font-mono); margin-top: 6px; }
 
+/* NWS / SPC TAB */
+#tab-nwsspc { gap: 0; }
+.nws-filter-btn {
+  flex: 1; padding: 4px 6px; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--font-head); font-size: 10px; letter-spacing: 1px;
+  text-transform: uppercase; cursor: pointer; transition: all .15s;
+}
+.nws-filter-btn:hover { border-color: var(--cyan-dim); color: var(--text); }
+.nws-filter-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,.08); }
+.nws-load-btn {
+  padding: 6px; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--font-head); font-size: 11px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all .2s;
+}
+.nws-load-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.nws-card {
+  background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--cyan);
+  border-radius: 3px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; transition: background .15s;
+}
+.nws-card:hover { background: #161c2a; }
+.nws-card.tornado-w { border-left-color: var(--tornado); }
+.nws-card.tstorm-w  { border-left-color: var(--tstorm); }
+.nws-card.flood-w   { border-left-color: var(--flood); }
+.nws-card.spc-high  { border-left-color: #ff00ff; }
+.nws-card.spc-mod   { border-left-color: var(--tornado); }
+.nws-card.spc-enh   { border-left-color: #ff9900; }
+.nws-card.spc-slgt  { border-left-color: var(--tstorm); }
+.nws-card.spc-mrgl  { border-left-color: #44cc44; }
+.nws-card.spc-tstm  { border-left-color: var(--muted); }
+.nws-card .nc-type  { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 3px; }
+.nws-card.tornado-w .nc-type { color: var(--tornado); }
+.nws-card.tstorm-w  .nc-type { color: var(--tstorm); }
+.nws-card.flood-w   .nc-type { color: var(--flood); }
+.nws-card.spc-high  .nc-type { color: #ff00ff; }
+.nws-card.spc-mod   .nc-type { color: var(--tornado); }
+.nws-card.spc-enh   .nc-type { color: #ff9900; }
+.nws-card.spc-slgt  .nc-type { color: var(--tstorm); }
+.nws-card.spc-mrgl  .nc-type { color: #44cc44; }
+.nws-card .nc-area  { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.nws-card .nc-desc  { font-size: 10px; color: var(--muted); margin-bottom: 3px; line-height: 1.4; }
+.nws-card .nc-meta  { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
+.nws-track-arrow { color: var(--cyan); font-size: 10px; font-family: var(--font-mono); margin-top: 3px; }
+
 /* STORM REPORTS TAB */
 #tab-storms { gap: 0; }
 #storm-controls { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -452,6 +495,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <button class="stab active" onclick="switchTab('alerts',this)">Alerts</button>
     <button class="stab"        onclick="switchTab('radar',this)">Loop</button>
     <button class="stab"        onclick="switchTab('storms',this)">Reports</button>
+    <button class="stab"        onclick="switchTab('nwsspc',this)">NWS/SPC</button>
   </div>
 
   <!-- ALERTS TAB -->
@@ -504,6 +548,26 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
       <button id="storm-load-btn" onclick="loadStormReports()">Load Reports</button>
     </div>
     <div id="storm-list"><div style="text-align:center;padding:24px;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;">Press Load Reports</div></div>
+  </div>
+
+  <!-- NWS/SPC TAB -->
+  <div class="tab-pane" id="tab-nwsspc">
+    <div id="nwsspc-controls" style="padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div style="display:flex;gap:5px;margin-bottom:8px;">
+        <button class="nws-filter-btn active" data-f="all"      onclick="setNWSFilter(this)">All</button>
+        <button class="nws-filter-btn"        data-f="Tornado"  onclick="setNWSFilter(this)">Tornado</button>
+        <button class="nws-filter-btn"        data-f="Severe"   onclick="setNWSFilter(this)">T-Storm</button>
+        <button class="nws-filter-btn"        data-f="Flash"    onclick="setNWSFilter(this)">Flood</button>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="nws-load-btn" id="nws-load-btn" onclick="loadNWSWarnings()" style="flex:1;">⟳ NWS Warnings</button>
+        <button class="nws-load-btn" id="spc-load-btn" onclick="loadSPCOutlooks()" style="flex:1;">⟳ SPC Outlook</button>
+      </div>
+      <div id="nwsspc-last-update" style="font-size:9px;color:var(--muted);font-family:var(--font-mono);margin-top:6px;text-align:center;">Not loaded</div>
+    </div>
+    <div id="nwsspc-list" style="flex:1;overflow-y:auto;padding:8px;">
+      <div style="text-align:center;padding:24px;color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;">Press NWS Warnings or SPC Outlook to load</div>
+    </div>
   </div>
 </div>
 
@@ -1082,6 +1146,148 @@ function toggleGPS() {
   gpsActive = !gpsActive;
   if (gpsActive) startGPS(); else stopGPS();
 }
+
+// ── NWS WARNINGS + SPC OUTLOOKS ──
+let nwsLayers=[], spcLayers=[], nwsData=[], nwsFilter='all';
+
+const NWS_EVENT_MAP={
+  'Tornado Warning':             {cls:'tornado-w',color:'#ff6b00',label:'Tornado Warning'},
+  'Tornado Watch':               {cls:'tornado-w',color:'#ff9900',label:'Tornado Watch'},
+  'Severe Thunderstorm Warning': {cls:'tstorm-w', color:'#ffcc00',label:'Severe T-Storm Warning'},
+  'Severe Thunderstorm Watch':   {cls:'tstorm-w', color:'#ffee66',label:'Severe T-Storm Watch'},
+  'Flash Flood Warning':         {cls:'flood-w',  color:'#4a9eff',label:'Flash Flood Warning'},
+  'Flash Flood Watch':           {cls:'flood-w',  color:'#6ab4ff',label:'Flash Flood Watch'},
+  'Flash Flood Emergency':       {cls:'flood-w',  color:'#00ffff',label:'Flash Flood Emergency'},
+};
+const SPC_RISK_MAP={
+  'HIGH':{cls:'spc-high',color:'#ff00ff',label:'HIGH Risk'},
+  'MDT': {cls:'spc-mod', color:'#ff3030',label:'Moderate Risk'},
+  'ENH': {cls:'spc-enh', color:'#ff9900',label:'Enhanced Risk'},
+  'SLGT':{cls:'spc-slgt',color:'#ffcc00',label:'Slight Risk'},
+  'MRGL':{cls:'spc-mrgl',color:'#44cc44',label:'Marginal Risk'},
+  'TSTM':{cls:'spc-tstm',color:'#888888',label:'General T-Storm'},
+};
+
+function setNWSFilter(btn){
+  document.querySelectorAll('.nws-filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); nwsFilter=btn.dataset.f;
+  renderNWSList();
+}
+
+function extractStormMotion(desc){
+  if(!desc)return null;
+  const m=desc.match(/MOVING\s+(?:TOWARD\s+THE\s+)?([A-Z\s]+?)\s+AT\s+(\d+)\s+MPH/i);
+  if(m)return `→ Moving ${m[1].trim()} at ${m[2]} mph`;
+  const m2=desc.match(/MOTION[^.]*?([NSEW]{1,3})\s+AT\s+(\d+)\s*MPH/i);
+  if(m2)return `→ Moving ${m2[1].toUpperCase()} at ${m2[2]} mph`;
+  return null;
+}
+
+async function loadNWSWarnings(){
+  const btn=document.getElementById('nws-load-btn');
+  btn.textContent='Loading...'; btn.disabled=true;
+  nwsLayers.forEach(l=>map.removeLayer(l)); nwsLayers=[];
+  try{
+    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&certainty=Observed,Likely&limit=500');
+    const data=await r.json();
+    nwsData=[];
+    (data.features||[]).forEach(f=>{
+      const p=f.properties;
+      const evMap=NWS_EVENT_MAP[p.event];
+      if(!evMap)return;
+      nwsData.push({id:f.id,event:p.event,evMap,area:p.areaDesc,sent:p.sent,expires:p.expires,desc:p.description,instruction:p.instruction,geo:f.geometry});
+    });
+    nwsData.forEach(w=>{
+      if(!w.geo)return;
+      const color=w.evMap.color;
+      let lyr;
+      try{
+        if(w.geo.type==='Polygon'){
+          lyr=L.polygon(w.geo.coordinates[0].map(c=>[c[1],c[0]]),{color,fillColor:color,fillOpacity:.15,weight:2});
+        } else if(w.geo.type==='MultiPolygon'){
+          lyr=L.polygon(w.geo.coordinates.map(p=>p[0].map(c=>[c[1],c[0]])),{color,fillColor:color,fillOpacity:.15,weight:2});
+        }
+      }catch(e){}
+      if(!lyr)return;
+      const motion=extractStormMotion(w.desc);
+      const exp=w.expires?new Date(w.expires).toUTCString().slice(0,22)+'Z':'—';
+      lyr.bindPopup(`<div class="popup-type" style="color:${color}">${escHtml(w.evMap.label)}</div><div class="popup-title">${escHtml(w.area.split(';')[0].trim())}</div>${motion?`<div style="color:${color};font-family:var(--font-mono);font-size:11px;margin:4px 0">${motion}</div>`:''}<div class="popup-meta">Expires: ${exp}</div>${w.instruction?`<div class="popup-desc" style="margin-top:4px">${escHtml(w.instruction.slice(0,200))}…</div>`:''}`);
+      lyr.addTo(map); nwsLayers.push(lyr); w._layer=lyr;
+    });
+    renderNWSList();
+    document.getElementById('nwsspc-last-update').textContent=`NWS: ${nwsData.length} warnings · ${new Date().toUTCString().slice(17,22)}Z`;
+  }catch(e){
+    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:#ff4444;font-size:11px;">Failed to load NWS data</div>`;
+  }
+  btn.textContent='⟳ NWS Warnings'; btn.disabled=false;
+}
+
+function renderNWSList(){
+  const list=document.getElementById('nwsspc-list'); list.innerHTML='';
+  let shown=nwsData.filter(w=>nwsFilter==='all'||w.event.toLowerCase().includes(nwsFilter.toLowerCase()));
+  if(!shown.length){
+    list.innerHTML=`<div style="text-align:center;padding:20px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;">No ${nwsFilter==='all'?'':nwsFilter+' '}warnings active</div>`;
+    return;
+  }
+  shown.forEach(w=>{
+    const card=document.createElement('div'); card.className=`nws-card ${w.evMap.cls}`;
+    const motion=extractStormMotion(w.desc);
+    const exp=w.expires?new Date(w.expires).toUTCString().slice(0,22)+'Z':'—';
+    card.innerHTML=`<div class="nc-type">${escHtml(w.evMap.label)}</div><div class="nc-area">${escHtml(w.area.split(';')[0].trim())}</div>${motion?`<div class="nws-track-arrow">${motion}</div>`:''}<div class="nc-meta">Expires: ${exp}</div>`;
+    card.addEventListener('click',()=>{if(w._layer){map.fitBounds(w._layer.getBounds(),{padding:[30,30]});w._layer.openPopup();}});
+    list.appendChild(card);
+  });
+}
+
+async function loadSPCOutlooks(){
+  const btn=document.getElementById('spc-load-btn');
+  btn.textContent='Loading...'; btn.disabled=true;
+  spcLayers.forEach(l=>map.removeLayer(l)); spcLayers=[];
+  try{
+    const r=await fetch('https://www.spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson');
+    const data=await r.json();
+    const list=document.getElementById('nwsspc-list');
+    const spcCards=[];
+    ([...(data.features||[])]).reverse().forEach(f=>{
+      const dn=String(f.properties&&(f.properties.DN||f.properties.LABEL||'')).toUpperCase().trim();
+      const label=String(f.properties&&(f.properties.LABEL2||f.properties.LABEL||dn)).toUpperCase().slice(0,4);
+      const risk=SPC_RISK_MAP[dn]||SPC_RISK_MAP[label]||null;
+      if(!risk||!f.geometry)return;
+      let lyr;
+      try{
+        if(f.geometry.type==='Polygon'){
+          lyr=L.polygon(f.geometry.coordinates[0].map(c=>[c[1],c[0]]),{color:risk.color,fillColor:risk.color,fillOpacity:.12,weight:2,dashArray:'6,3'});
+        } else if(f.geometry.type==='MultiPolygon'){
+          lyr=L.polygon(f.geometry.coordinates.map(p=>p[0].map(c=>[c[1],c[0]])),{color:risk.color,fillColor:risk.color,fillOpacity:.12,weight:2,dashArray:'6,3'});
+        }
+      }catch(e){}
+      if(!lyr)return;
+      lyr.bindPopup(`<div class="popup-type" style="color:${risk.color}">SPC Day 1 Outlook</div><div class="popup-title">${risk.label}</div><div class="popup-desc">Categorical severe weather risk area.</div><div class="popup-meta">Source: NOAA/SPC</div>`);
+      lyr.addTo(map); spcLayers.push(lyr); spcCards.push({risk,lyr});
+    });
+    if(spcCards.length){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:8px 2px 4px;';
+      hdr.textContent='SPC Day 1 Outlook';
+      list.appendChild(hdr);
+      spcCards.reverse().forEach(({risk,lyr})=>{
+        const card=document.createElement('div'); card.className=`nws-card ${risk.cls}`;
+        card.innerHTML=`<div class="nc-type">SPC Day 1</div><div class="nc-area">${risk.label}</div><div class="nc-meta">NOAA Storm Prediction Center · Convective Outlook</div>`;
+        card.addEventListener('click',()=>{map.fitBounds(lyr.getBounds(),{padding:[30,30]});lyr.openPopup();});
+        list.appendChild(card);
+      });
+    }
+    document.getElementById('nwsspc-last-update').textContent=`SPC: ${spcCards.length} risk areas · ${new Date().toUTCString().slice(17,22)}Z`;
+  }catch(e){
+    document.getElementById('nwsspc-list').innerHTML+=`<div style="text-align:center;padding:16px;color:#ff4444;font-size:11px;">Failed to load SPC data</div>`;
+  }
+  btn.textContent='⟳ SPC Outlook'; btn.disabled=false;
+}
+
+setInterval(()=>{
+  const pane=document.getElementById('tab-nwsspc');
+  if(pane&&pane.classList.contains('active')&&nwsData.length>0)loadNWSWarnings();
+},2*60*1000);
 
 // ══ BOOT ══
 loadPolygons();
