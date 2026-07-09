@@ -673,6 +673,20 @@ function switchTab(name, btn) {
   document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   btn.classList.add('active');
+  // Tab-specific actions
+  if(name==='radar'){
+    if(radarLayer){map.removeLayer(radarLayer);}
+    renderLoopFrame(loopFrame);
+    document.getElementById('wx-hint').style.display='none';
+  } else {
+    if(typeof loopPlaying!=='undefined'&&loopPlaying)toggleLoopPlay();
+    if(typeof loopLayer!=='undefined'&&loopLayer){map.removeLayer(loopLayer);loopLayer=null;}
+    if(radarOn&&!radarLayer){radarLayer=buildRadarLayer(currentProduct);radarLayer.addTo(map);}
+    if(name==='alerts') document.getElementById('wx-hint').style.display='block';
+    else document.getElementById('wx-hint').style.display='none';
+    if(name==='storms') loadStormReports();
+    if(name==='nwsspc') loadNWSWarnings();
+  }
 }
 
 // ══ SUPABASE ══
@@ -863,25 +877,6 @@ function setLoopProduct(btn){
   document.querySelectorAll('.loop-pill').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   loopProduct=btn.dataset.lp; renderLoopFrame(loopFrame);
 }
-// activate loop layer when switching to Loop tab
-const origSwitchTab=switchTab;
-function switchTab(name,btn){
-  origSwitchTab(name,btn);
-  if(name==='radar'){
-    // pause live radar, show loop
-    if(radarLayer){map.removeLayer(radarLayer);}
-    renderLoopFrame(loopFrame);
-    document.getElementById('wx-hint').style.display='none';
-  } else {
-    // restore live radar, remove loop
-    if(loopPlaying)toggleLoopPlay();
-    if(loopLayer){map.removeLayer(loopLayer);loopLayer=null;}
-    if(radarOn&&!radarLayer){radarLayer=buildRadarLayer(currentProduct);radarLayer.addTo(map);}
-    if(name==='alerts') document.getElementById('wx-hint').style.display='block';
-    else document.getElementById('wx-hint').style.display='none';
-  }
-}
-
 // ══ STORM REPORTS (IEM LSR) ══
 let stormMarkers=[];
 async function loadStormReports(){
