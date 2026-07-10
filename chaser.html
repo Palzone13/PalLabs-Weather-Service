@@ -388,6 +388,58 @@ body::after{
 #adm-wipe-btn:hover{background:rgba(255,48,48,.2);}
 #adm-wipe-note{font-size:9px;color:var(--muted2);text-align:center;margin-top:5px;font-family:var(--font-mono);}
 
+/* LOOP TAB */
+#ptab-loop{padding:12px;gap:10px;}
+.tab-section-label2{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;}
+#loop-product-pills{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;}
+.loop-pill{
+  padding:4px 9px;border:1px solid var(--green-dark);font-size:10px;font-weight:600;
+  letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .15s;
+  background:transparent;color:var(--muted2);font-family:var(--font-head);
+}
+.loop-pill:hover{border-color:var(--green-dim);color:var(--text);}
+.loop-pill.active{border-color:var(--green);color:var(--green);background:rgba(0,255,65,.08);}
+#loop-scrubber-wrap{margin-bottom:8px;}
+#loop-scrubber{width:100%;accent-color:var(--green);cursor:pointer;}
+#loop-time-display{font-family:var(--font-mono);font-size:11px;color:var(--green);margin-bottom:8px;text-align:center;}
+#loop-controls{display:flex;gap:6px;margin-bottom:10px;}
+.loop-btn{
+  flex:1;padding:7px;background:transparent;border:1px solid var(--green-dark);
+  color:var(--muted2);font-family:var(--font-head);font-size:12px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;transition:all .2s;
+}
+.loop-btn:hover{border-color:var(--green);color:var(--green);}
+.loop-btn.playing{border-color:var(--green);color:var(--green);background:rgba(0,255,65,.08);}
+#loop-speed-row{display:flex;align-items:center;gap:8px;}
+#loop-speed-row label{font-size:10px;color:var(--muted2);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;}
+#loop-speed{flex:1;accent-color:var(--green);cursor:pointer;}
+#loop-frame-count{font-size:10px;color:var(--muted2);font-family:var(--font-mono);margin-top:6px;}
+
+/* STORM REPORTS TAB (chaser) */
+#ptab-reports{gap:0;}
+#c-storm-controls{padding:10px 12px;border-bottom:1px solid var(--green-dark);flex-shrink:0;}
+#c-storm-hours-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+#c-storm-hours-row label{font-size:10px;color:var(--muted2);letter-spacing:1px;text-transform:uppercase;white-space:nowrap;}
+#c-storm-hours{flex:1;accent-color:var(--green);cursor:pointer;}
+#c-storm-hours-val{font-family:var(--font-mono);font-size:11px;color:var(--green);}
+#c-storm-load-btn{
+  width:100%;padding:7px;background:transparent;border:1px solid var(--green);
+  color:var(--green);font-family:var(--font-head);font-size:12px;font-weight:600;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all .2s;
+}
+#c-storm-load-btn:hover{background:rgba(0,255,65,.08);}
+#c-storm-list{flex:1;overflow-y:auto;padding:8px;}
+#c-storm-list::-webkit-scrollbar{width:3px;}
+#c-storm-list::-webkit-scrollbar-thumb{background:var(--green-dark);}
+.c-storm-card{
+  background:var(--surface2);border:1px solid var(--border);border-left:3px solid #ff6b00;
+  padding:7px 9px;margin-bottom:5px;cursor:pointer;transition:background .15s;
+}
+.c-storm-card:hover{background:#0d1a0d;}
+.c-storm-card .s-type{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#ff6b00;margin-bottom:2px;}
+.c-storm-card .s-loc{font-size:12px;font-weight:600;color:var(--text);}
+.c-storm-card .s-meta{font-size:10px;color:var(--muted2);font-family:var(--font-mono);}
+
 /* NWS / SPC */
 .nws-filter-btn{
   flex:1;padding:4px 5px;background:transparent;border:1px solid var(--green-dark);
@@ -554,6 +606,8 @@ body::after{
     <button class="ptab active" onclick="switchPTab('chasers',this)">Chasers</button>
     <button class="ptab"        onclick="switchPTab('chat',this)">Comms</button>
     <button class="ptab"        onclick="switchPTab('alerts',this)">Alerts</button>
+    <button class="ptab"        onclick="switchPTab('loop',this)">Loop</button>
+    <button class="ptab"        onclick="switchPTab('reports',this)">Reports</button>
     <button class="ptab"        onclick="switchPTab('nwsspc',this)">NWS/SPC</button>
   </div>
 
@@ -593,6 +647,44 @@ body::after{
     <div id="alerts-pane-inner">
       <div id="no-poly" style="text-align:center;padding:28px 12px;color:var(--muted2);font-size:11px;letter-spacing:1px;text-transform:uppercase;">Loading polygons...</div>
     </div>
+  </div>
+
+  <!-- LOOP TAB -->
+  <div class="ptab-pane" id="ptab-loop" style="padding:12px;gap:10px;overflow-y:auto;">
+    <div class="tab-section-label2">Product</div>
+    <div id="loop-product-pills">
+      <button class="loop-pill active" data-lp="N0Q" onclick="setLoopProduct(this)">Base Refl.</button>
+      <button class="loop-pill"        data-lp="N0C" onclick="setLoopProduct(this)">Composite</button>
+      <button class="loop-pill"        data-lp="N0U" onclick="setLoopProduct(this)">Velocity</button>
+    </div>
+    <div class="tab-section-label2">Playback</div>
+    <div id="loop-scrubber-wrap">
+      <input type="range" id="loop-scrubber" min="0" max="11" value="11" oninput="scrubLoop(this.value)">
+    </div>
+    <div id="loop-time-display">—</div>
+    <div id="loop-controls">
+      <button class="loop-btn" id="loop-play-btn" onclick="toggleLoopPlay()">▶ Play</button>
+      <button class="loop-btn" onclick="stepLoop(-1)">◀ Step</button>
+      <button class="loop-btn" onclick="stepLoop(1)">Step ▶</button>
+    </div>
+    <div id="loop-speed-row">
+      <label>Speed</label>
+      <input type="range" id="loop-speed" min="200" max="1200" value="600" step="100">
+    </div>
+    <div id="loop-frame-count">12 frames · ~1hr history</div>
+  </div>
+
+  <!-- REPORTS TAB -->
+  <div class="ptab-pane" id="ptab-reports">
+    <div id="c-storm-controls">
+      <div id="c-storm-hours-row">
+        <label>Hours back</label>
+        <input type="range" id="c-storm-hours" min="1" max="24" value="6" oninput="document.getElementById('c-storm-hours-val').textContent=this.value+'h'">
+        <span id="c-storm-hours-val">6h</span>
+      </div>
+      <button id="c-storm-load-btn" onclick="loadChaserStormReports()">Load Reports</button>
+    </div>
+    <div id="c-storm-list"><div style="text-align:center;padding:24px;color:var(--muted2);font-size:11px;letter-spacing:1px;text-transform:uppercase;">Press Load Reports</div></div>
   </div>
 
   <!-- NWS/SPC TAB -->
@@ -760,7 +852,18 @@ function switchPTab(name,btn){
   document.querySelectorAll('.ptab').forEach(b=>b.classList.remove('active'));
   document.getElementById('ptab-'+name).classList.add('active');
   btn.classList.add('active');
-  if(name==='nwsspc') loadNWSWarnings();
+  if(name==='loop'){
+    // pause live radar, preload loop frames
+    if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
+    preloadLoopFrames(loopProduct);
+  } else {
+    // leaving loop tab — stop playback, remove loop layers, restore live radar
+    if(loopPlaying)toggleLoopPlay();
+    loopLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});loopLayers=[];
+    if(radarOn&&!radarLayer){radarLayer=buildRadarLayer(radarProd);radarLayer.addTo(map);}
+    if(name==='nwsspc') loadNWSWarnings();
+    if(name==='reports') {} // manual load via button
+  }
 }
 
 // ══ RADAR ══
@@ -1125,6 +1228,108 @@ async function joinNetwork(){
     alert('Failed to join: '+e.message);
   }
 }
+// ══ RADAR LOOP ══
+let loopProduct='N0Q', loopFrame=11, loopPlaying=false, loopTimer=null;
+const LOOP_FRAMES=12;
+let loopLayers=[], loopPreloading=false;
+
+function loopTileUrl(product, minsBack){
+  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-${product}-${minsBack}/{z}/{x}/{y}.png`;
+}
+function getLoopTimeLabel(frameIdx){
+  const minsAgo=(LOOP_FRAMES-1-frameIdx)*5;
+  const d=new Date(Date.now()-minsAgo*60000);
+  return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+'Z  ('+minsAgo+' min ago)';
+}
+async function preloadLoopFrames(product){
+  loopPreloading=true;
+  loopLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+  loopLayers=[];
+  const btn=document.getElementById('loop-play-btn');
+  btn.disabled=true; btn.textContent='Loading...';
+  document.getElementById('loop-time-display').textContent='Preloading frames…';
+  for(let i=0;i<LOOP_FRAMES;i++){
+    const minsBack=(LOOP_FRAMES-1-i)*5;
+    const lyr=L.tileLayer(loopTileUrl(product,minsBack),{opacity:0,zIndex:201,tileSize:256,attribution:'Radar: IEM RIDGE'});
+    lyr.addTo(map);
+    loopLayers.push(lyr);
+  }
+  setTimeout(()=>{
+    loopPreloading=false;
+    btn.disabled=false; btn.textContent='▶ Play';
+    showLoopFrame(LOOP_FRAMES-1);
+  },2000);
+}
+function showLoopFrame(idx){
+  loopFrame=idx;
+  loopLayers.forEach((l,i)=>l.setOpacity(i===idx?0.75:0));
+  document.getElementById('loop-time-display').textContent=getLoopTimeLabel(idx);
+  document.getElementById('loop-scrubber').value=idx;
+}
+function scrubLoop(v){if(!loopPreloading)showLoopFrame(parseInt(v));}
+function stepLoop(d){if(!loopPreloading)showLoopFrame(Math.max(0,Math.min(LOOP_FRAMES-1,loopFrame+d)));}
+function toggleLoopPlay(){
+  if(loopPreloading)return;
+  loopPlaying=!loopPlaying;
+  const btn=document.getElementById('loop-play-btn');
+  if(loopPlaying){btn.textContent='⏸ Pause';btn.classList.add('playing');playLoopTick();}
+  else{btn.textContent='▶ Play';btn.classList.remove('playing');if(loopTimer){clearTimeout(loopTimer);loopTimer=null;}}
+}
+function playLoopTick(){
+  if(!loopPlaying)return;
+  showLoopFrame((loopFrame+1)%LOOP_FRAMES);
+  const spd=parseInt(document.getElementById('loop-speed').value);
+  loopTimer=setTimeout(playLoopTick,spd);
+}
+function setLoopProduct(btn){
+  document.querySelectorAll('.loop-pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); loopProduct=btn.dataset.lp;
+  if(loopPlaying)toggleLoopPlay();
+  preloadLoopFrames(loopProduct);
+}
+
+// ══ STORM REPORTS (chaser) ══
+let cStormMarkers=[];
+async function loadChaserStormReports(){
+  const btn=document.getElementById('c-storm-load-btn');
+  btn.textContent='Loading...'; btn.disabled=true;
+  cStormMarkers.forEach(m=>map.removeLayer(m)); cStormMarkers=[];
+  document.getElementById('c-storm-list').innerHTML='';
+  const hrs=document.getElementById('c-storm-hours').value;
+  const end=new Date(), start=new Date(end-hrs*3600000);
+  const fmt=d=>`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}T${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}:00`;
+  const url=`https://mesonet.agron.iastate.edu/geojson/lsr.php?sts=${encodeURIComponent(fmt(start))}&ets=${encodeURIComponent(fmt(end))}&wfo=ALL`;
+  try{
+    const r=await fetch(url); const data=await r.json();
+    const features=data.features||[];
+    if(!features.length){
+      document.getElementById('c-storm-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted2);font-size:11px;letter-spacing:1px;text-transform:uppercase;">No reports found</div>';
+      btn.textContent='Load Reports'; btn.disabled=false; return;
+    }
+    features.slice(0,150).forEach(f=>{
+      const p=f.properties, coords=f.geometry.coordinates;
+      const lat=coords[1], lng=coords[0];
+      const icon=L.divIcon({className:'',html:`<div style="width:10px;height:10px;background:#ff6b00;border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px #ff6b00"></div>`,iconSize:[10,10],iconAnchor:[5,5]});
+      const m=L.marker([lat,lng],{icon}).addTo(map);
+      m.bindPopup(`<div class="lp-type" style="color:#ff6b00">${esc(p.typetext||p.type||'Report')}</div><div class="lp-title">${esc(p.city||'Unknown')}, ${esc(p.st||'')}</div><div class="lp-meta">${esc(p.valid||'')}${p.magnitude?' · '+p.magnitude+' '+p.units:''}</div>`);
+      cStormMarkers.push(m);
+      const card=document.createElement('div'); card.className='c-storm-card';
+      card.innerHTML=`<div class="s-type">${esc(p.typetext||p.type||'Report')}</div><div class="s-loc">${esc(p.city||'Unknown')}, ${esc(p.st||'')}</div><div class="s-meta">${esc(p.valid||'')}${p.magnitude?' · '+p.magnitude+' '+p.units:''}</div>`;
+      card.addEventListener('click',()=>{map.setView([lat,lng],10);m.openPopup();});
+      document.getElementById('c-storm-list').appendChild(card);
+    });
+    if(features.length>150){
+      const d=document.createElement('div');
+      d.style.cssText='text-align:center;padding:8px;color:var(--muted2);font-size:10px;font-family:var(--font-mono)';
+      d.textContent=`+${features.length-150} more reports`;
+      document.getElementById('c-storm-list').appendChild(d);
+    }
+  }catch(e){
+    document.getElementById('c-storm-list').innerHTML='<div style="text-align:center;padding:20px;color:#ff4444;font-size:11px;">Failed to load reports</div>';
+  }
+  btn.textContent='Load Reports'; btn.disabled=false;
+}
+
 // ══ NWS WARNINGS + SPC OUTLOOKS ══
 let nwsLayers=[], spcLayers=[], nwsData=[], nwsFilter='all';
 const NWS_EVENT_MAP={
@@ -1161,7 +1366,10 @@ async function loadNWSWarnings(){
   btn.textContent='Loading...'; btn.disabled=true;
   nwsLayers.forEach(l=>map.removeLayer(l)); nwsLayers=[];
   try{
-    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&certainty=Observed,Likely&limit=500');
+    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&limit=500',{
+      headers:{'Accept':'application/geo+json'}
+    });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const data=await r.json();
     nwsData=[];
     (data.features||[]).forEach(f=>{
@@ -1182,10 +1390,17 @@ async function loadNWSWarnings(){
       lyr.bindPopup(`<div class="lp-type" style="color:${w.evMap.color}">${esc(w.evMap.label)}</div><div class="lp-title">${esc(w.area.split(';')[0].trim())}</div>${motion?`<div style="color:${w.evMap.color};font-family:var(--font-mono);font-size:11px;margin:4px 0">${motion}</div>`:''}<div class="lp-meta">Expires: ${exp}</div>`);
       lyr.addTo(map); nwsLayers.push(lyr); w._layer=lyr;
     });
+    // NWS official tile overlay
+    const tl=L.tileLayer('https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',{opacity:.55,zIndex:199,attribution:'NWS'}).addTo(map);
+    nwsLayers.push(tl);
     renderNWSList();
     document.getElementById('nwsspc-last-update').textContent=`NWS: ${nwsData.length} warnings · ${new Date().toUTCString().slice(17,22)}Z`;
   }catch(e){
-    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:#ff4444;font-size:11px;">Failed to load NWS data</div>`;
+    console.warn('NWS GeoJSON failed, tile fallback:', e.message);
+    const tl=L.tileLayer('https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',{opacity:.7,zIndex:199,attribution:'NWS'}).addTo(map);
+    nwsLayers.push(tl);
+    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:var(--amber);font-size:11px;letter-spacing:1px;">GeoJSON unavailable — showing NWS tile overlay</div>`;
+    document.getElementById('nwsspc-last-update').textContent=`NWS tile overlay · ${new Date().toUTCString().slice(17,22)}Z`;
   }
   btn.textContent='⟳ NWS'; btn.disabled=false;
 }
