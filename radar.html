@@ -46,11 +46,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #admin-btn.active { border-color: var(--tornado); color: var(--tornado); background: rgba(255,107,0,.08); }
 
 /* MAP */
-#map { position: fixed; top: 48px; left: 0; right: 0; bottom: 24px; z-index: 1; }
+#map { position: fixed; top: 48px; left: 0; right: 290px; bottom: 88px; z-index: 1; transition: top .2s; }
 
 /* SIDEBAR */
 #sidebar {
-  position: fixed; top: 48px; right: 0; width: 290px; bottom: 24px;
+  position: fixed; top: 48px; right: 0; width: 290px; bottom: 88px;
   background: rgba(10,12,16,.95); border-left: 1px solid var(--border);
   z-index: 500; display: flex; flex-direction: column; backdrop-filter: blur(6px);
 }
@@ -353,6 +353,48 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* MISC */
 .drawing-mode { cursor: crosshair !important; }
+
+/* TIME SCRUBBER */
+#time-bar {
+  position: fixed; bottom: 24px; left: 0; right: 290px; height: 64px;
+  background: rgba(10,12,16,.96); border-top: 1px solid var(--border);
+  z-index: 600; display: flex; flex-direction: column; justify-content: center;
+  padding: 0 14px 0 10px; backdrop-filter: blur(6px);
+}
+#time-bar-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+#time-play-btn {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  font-size: 12px; width: 24px; height: 24px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+#time-play-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+#time-play-btn.playing { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,.08); }
+#time-label {
+  font-family: var(--font-mono); font-size: 11px; color: var(--cyan);
+  letter-spacing: 1px; white-space: nowrap; min-width: 130px; flex-shrink: 0; text-align: center;
+}
+#time-track-wrap { flex: 1; position: relative; height: 24px; display: flex; align-items: center; cursor: pointer; }
+#time-track { width: 100%; height: 3px; background: var(--border); border-radius: 2px; position: relative; }
+#time-track-fill { height: 100%; background: var(--cyan); border-radius: 2px; width: 100%; }
+#time-handle {
+  position: absolute; top: 50%; transform: translate(50%, -50%);
+  width: 13px; height: 13px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--cyan); box-shadow: 0 0 8px var(--cyan); cursor: grab; right: 0;
+}
+#time-handle:active { cursor: grabbing; }
+#now-label-wrap {
+  position: absolute; right: 0; top: -18px; transform: translateX(50%);
+  display: flex; flex-direction: column; align-items: center; pointer-events: none;
+}
+#now-label-wrap span { font-size: 9px; font-family: var(--font-mono); color: var(--cyan); letter-spacing: 1px; }
+#time-ticks-row {
+  display: flex; position: relative; margin-left: 162px; height: 14px;
+}
+.ttick {
+  position: absolute; font-size: 9px; font-family: var(--font-mono);
+  color: var(--muted); transform: translateX(-50%);
+}
+
 #statusbar {
   position: fixed; bottom: 0; left: 0; right: 290px; height: 24px;
   background: var(--surface); border-top: 1px solid var(--border);
@@ -609,6 +651,22 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div id="auth-error">Incorrect password.</div>
     <button id="auth-cancel" onclick="closeAuth()">Cancel</button>
   </div>
+</div>
+
+<!-- TIME SCRUBBER BAR -->
+<div id="time-bar">
+  <div id="time-bar-top">
+    <button id="time-play-btn" onclick="toggleTimeScrubPlay()">▶</button>
+    <div id="time-label">Now</div>
+    <div id="time-track-wrap" id="time-track-outer">
+      <div id="time-track">
+        <div id="time-track-fill"></div>
+      </div>
+      <div id="time-handle"></div>
+      <div id="now-label-wrap"><span>Now</span></div>
+    </div>
+  </div>
+  <div id="time-ticks-row"></div>
 </div>
 
 <!-- STATUS BAR -->
@@ -1191,6 +1249,118 @@ function toggleGPS() {
   if (gpsActive) startGPS(); else stopGPS();
 }
 
+// ── TIME SCRUBBER ──
+// Mirrors the radar loop but as a bottom bar. "Now" = live radar, scrub left = loop frames.
+let scrubPlaying=false, scrubTimer=null, scrubFrame=LOOP_FRAMES; // LOOP_FRAMES = live/now
+
+function buildTimeTicks(){
+  const row=document.getElementById('time-ticks-row');
+  row.innerHTML='';
+  const totalMins=LOOP_FRAMES*5; // 60 mins
+  for(let i=0;i<=LOOP_FRAMES;i++){
+    const minsAgo=(LOOP_FRAMES-i)*5;
+    const d=new Date(Date.now()-minsAgo*60000);
+    let h=d.getHours(), ampm=h>=12?'p':'a';
+    h=h%12||12;
+    const label=minsAgo===0?'Now':`${h}${ampm}`;
+    const pct=(i/LOOP_FRAMES)*100;
+    const tick=document.createElement('div');
+    tick.className='ttick'; tick.textContent=label;
+    tick.style.left=pct+'%';
+    row.appendChild(tick);
+  }
+}
+
+function setScrubPosition(frameIdx){
+  // frameIdx: 0=oldest, LOOP_FRAMES-1=newest loop frame, LOOP_FRAMES=live/now
+  scrubFrame=frameIdx;
+  const pct=frameIdx/LOOP_FRAMES*100;
+  document.getElementById('time-track-fill').style.width=pct+'%';
+  document.getElementById('time-handle').style.right=(100-pct)+'%';
+  if(frameIdx===LOOP_FRAMES){
+    document.getElementById('time-label').textContent='Now  (Live)';
+    // show live radar
+    if(!radarLayer&&radarOn){radarLayer=buildRadarLayer(currentProduct);radarLayer.addTo(map);}
+    loopLayers.forEach(l=>l.setOpacity(0));
+  } else {
+    const minsAgo=(LOOP_FRAMES-frameIdx)*5;
+    const d=new Date(Date.now()-minsAgo*60000);
+    const h=String(d.getUTCHours()).padStart(2,'0'), m=String(d.getUTCMinutes()).padStart(2,'0');
+    document.getElementById('time-label').textContent=`${h}:${m}Z  (${minsAgo} min ago)`;
+    // hide live radar, show loop frame
+    if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
+    if(loopLayers.length>0) showLoopFrame(frameIdx);
+    else {
+      // preload if not yet loaded
+      preloadLoopFrames(currentProduct).then(()=>showLoopFrame(frameIdx));
+    }
+  }
+}
+
+function toggleTimeScrubPlay(){
+  scrubPlaying=!scrubPlaying;
+  const btn=document.getElementById('time-play-btn');
+  if(scrubPlaying){
+    btn.textContent='⏸'; btn.classList.add('playing');
+    // make sure loop frames are loaded
+    if(loopLayers.length===0) preloadLoopFrames(currentProduct);
+    scrubFrame=0; tickScrub();
+  } else {
+    btn.textContent='▶'; btn.classList.remove('playing');
+    if(scrubTimer){clearTimeout(scrubTimer);scrubTimer=null;}
+  }
+}
+
+function tickScrub(){
+  if(!scrubPlaying)return;
+  setScrubPosition(scrubFrame);
+  scrubFrame++;
+  if(scrubFrame>LOOP_FRAMES) scrubFrame=0;
+  scrubTimer=setTimeout(tickScrub, 600);
+}
+
+// drag on time track
+function initTimeScrubDrag(){
+  const wrap=document.getElementById('time-track-wrap');
+  const track=document.getElementById('time-track');
+  let dragging=false;
+
+  function posToFrame(clientX){
+    const rect=track.getBoundingClientRect();
+    const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+    return Math.round(pct*LOOP_FRAMES);
+  }
+
+  function onDown(e){
+    dragging=true;
+    if(scrubPlaying)toggleTimeScrubPlay();
+    if(loopLayers.length===0) preloadLoopFrames(currentProduct);
+    const x=e.touches?e.touches[0].clientX:e.clientX;
+    setScrubPosition(posToFrame(x));
+  }
+  function onMove(e){
+    if(!dragging)return;
+    e.preventDefault();
+    const x=e.touches?e.touches[0].clientX:e.clientX;
+    setScrubPosition(posToFrame(x));
+  }
+  function onUp(){ dragging=false; }
+
+  wrap.addEventListener('mousedown', onDown);
+  wrap.addEventListener('touchstart', onDown, {passive:false});
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, {passive:false});
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchend', onUp);
+}
+
+// init
+buildTimeTicks();
+setInterval(buildTimeTicks, 60000); // refresh tick labels every minute
+initTimeScrubDrag();
+// start at "Now"
+setTimeout(()=>setScrubPosition(LOOP_FRAMES), 100);
+
 // ── NWS WARNINGS + SPC OUTLOOKS ──
 let nwsLayers=[], spcLayers=[], nwsData=[], nwsFilter='all';
 
@@ -1232,14 +1402,19 @@ async function loadNWSWarnings(){
   btn.textContent='Loading...'; btn.disabled=true;
   nwsLayers.forEach(l=>map.removeLayer(l)); nwsLayers=[];
   try{
-    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&certainty=Observed,Likely&limit=500');
+    // NWS public API - use simple active alerts GeoJSON endpoint
+    // Must include User-Agent in a way the browser allows (via a simple header)
+    const r=await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&limit=500',{
+      headers:{ 'Accept':'application/geo+json' }
+    });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const data=await r.json();
     nwsData=[];
     (data.features||[]).forEach(f=>{
       const p=f.properties;
       const evMap=NWS_EVENT_MAP[p.event];
       if(!evMap)return;
-      nwsData.push({id:f.id,event:p.event,evMap,area:p.areaDesc,sent:p.sent,expires:p.expires,desc:p.description,instruction:p.instruction,geo:f.geometry});
+      nwsData.push({id:f.id,event:p.event,evMap,area:p.areaDesc,expires:p.expires,desc:p.description,instruction:p.instruction,geo:f.geometry});
     });
     nwsData.forEach(w=>{
       if(!w.geo)return;
@@ -1258,11 +1433,33 @@ async function loadNWSWarnings(){
       lyr.bindPopup(`<div class="popup-type" style="color:${color}">${escHtml(w.evMap.label)}</div><div class="popup-title">${escHtml(w.area.split(';')[0].trim())}</div>${motion?`<div style="color:${color};font-family:var(--font-mono);font-size:11px;margin:4px 0">${motion}</div>`:''}<div class="popup-meta">Expires: ${exp}</div>${w.instruction?`<div class="popup-desc" style="margin-top:4px">${escHtml(w.instruction.slice(0,200))}…</div>`:''}`);
       lyr.addTo(map); nwsLayers.push(lyr); w._layer=lyr;
     });
+
+    // Also add NWS official warning tile layer as a visual fallback overlay
+    if(!window._nwsTileLayer){
+      window._nwsTileLayer=L.tileLayer(
+        'https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',
+        {opacity:.6,zIndex:199,attribution:'NWS Warnings'}
+      ).addTo(map);
+      nwsLayers.push(window._nwsTileLayer);
+    }
+
     renderNWSList();
     document.getElementById('nwsspc-last-update').textContent=`NWS: ${nwsData.length} warnings · ${new Date().toUTCString().slice(17,22)}Z`;
   }catch(e){
-    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:#ff4444;font-size:11px;">Failed to load NWS data</div>`;
+    // If GeoJSON API fails, fall back to just the NWS tile layer
+    console.warn('NWS GeoJSON failed, using tile fallback:',e.message);
+    if(!window._nwsTileLayer){
+      window._nwsTileLayer=L.tileLayer(
+        'https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',
+        {opacity:.7,zIndex:199,attribution:'NWS Warnings'}
+      ).addTo(map);
+      nwsLayers.push(window._nwsTileLayer);
+    }
+    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:var(--tstorm);font-size:11px;letter-spacing:1px;">GeoJSON unavailable — showing NWS warning tiles instead</div>`;
+    document.getElementById('nwsspc-last-update').textContent=`NWS tile overlay active · ${new Date().toUTCString().slice(17,22)}Z`;
   }
+  // clear tile layer ref so next load rebuilds it
+  window._nwsTileLayer=null;
   btn.textContent='⟳ NWS Warnings'; btn.disabled=false;
 }
 
