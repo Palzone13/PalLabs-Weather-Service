@@ -497,6 +497,66 @@ body::after{
 #admin-auth-cancel{background:none;border:none;color:var(--muted2);font-size:10px;cursor:pointer;margin-top:8px;width:100%;text-align:center;letter-spacing:1px;}
 #admin-auth-cancel:hover{color:var(--text);}
 
+/* ── MOBILE ── */
+@media(max-width:768px){
+  #map{right:0!important;bottom:54px!important;}
+  #panel{display:none!important;}
+  #statusbar{display:none!important;}
+  #admin-panel{width:100%!important;bottom:54px!important;}
+  #warn-banner{right:0!important;}
+  #radar-ctrl{display:none!important;}
+  #layer-ctrl{display:none!important;}
+  #pin-btn{right:10px!important;bottom:62px!important;}
+  #mobile-chaser-nav{display:flex!important;}
+  #mobile-chaser-sheet{display:flex!important;}
+}
+#mobile-chaser-nav{
+  display:none;position:fixed;bottom:0;left:0;right:0;height:54px;
+  background:var(--surface);border-top:1px solid var(--green-dark);
+  z-index:800;align-items:stretch;
+}
+.mcnav-btn{
+  flex:1;background:none;border:none;border-right:1px solid var(--green-dark);
+  color:var(--muted2);font-family:var(--font-head);font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:color .2s;
+}
+.mcnav-btn:last-child{border-right:none;}
+.mcnav-btn.active{color:var(--green);}
+.mcnav-btn svg{opacity:.6;}
+.mcnav-btn.active svg{opacity:1;}
+#mobile-chaser-sheet{
+  display:none;position:fixed;bottom:54px;left:0;right:0;z-index:700;
+  background:var(--surface);border-top:2px solid var(--green);
+  flex-direction:column;max-height:65vh;
+  transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);
+}
+#mobile-chaser-sheet.open{transform:translateY(0);}
+#mcs-handle{width:36px;height:4px;background:var(--green-dark);border-radius:2px;margin:8px auto 4px;flex-shrink:0;}
+#mcs-tabs{display:flex;border-bottom:1px solid var(--green-dark);flex-shrink:0;}
+.mcstab{
+  flex:1;padding:8px 2px 6px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--muted2);font-family:var(--font-head);font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;transition:all .15s;
+}
+.mcstab.active{color:var(--green);border-bottom-color:var(--green);}
+#mcs-content{flex:1;overflow-y:auto;}
+#mcs-content::-webkit-scrollbar{width:3px;}
+#mcs-content::-webkit-scrollbar-thumb{background:var(--green-dark);}
+/* mobile layer/radar row */
+#mobile-map-controls{
+  padding:10px 12px;display:flex;flex-direction:column;gap:8px;
+}
+.m-row-label{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted2);margin-bottom:4px;}
+.m-btn-row{display:flex;gap:6px;}
+.m-btn-row button{
+  flex:1;padding:8px 4px;background:transparent;border:1px solid var(--green-dark);
+  color:var(--muted2);font-family:var(--font-head);font-size:11px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;transition:all .2s;
+}
+.m-btn-row button:hover,.m-btn-row button.active{border-color:var(--green);color:var(--green);background:rgba(0,255,65,.06);}
+
 /* STATUS BAR */
 #statusbar{
   position:fixed;bottom:0;left:0;right:320px;height:24px;
@@ -585,7 +645,7 @@ body::after{
   </div>
   <div id="radar-products">
     <button class="rprod active" data-p="N0Q" onclick="setRadarProd(this)">Base Refl. <span class="rtag">N0Q</span></button>
-    <button class="rprod"        data-p="N0C" onclick="setRadarProd(this)">Composite  <span class="rtag">N0C</span></button>
+    <button class="rprod"        data-p="EET" onclick="setRadarProd(this)">Echo Tops  <span class="rtag">EET</span></button>
     <button class="rprod"        data-p="N0U" onclick="setRadarProd(this)">Velocity   <span class="rtag">N0U</span></button>
   </div>
   <div id="radar-opacity-row">
@@ -654,7 +714,7 @@ body::after{
     <div class="tab-section-label2">Product</div>
     <div id="loop-product-pills">
       <button class="loop-pill active" data-lp="N0Q" onclick="setLoopProduct(this)">Base Refl.</button>
-      <button class="loop-pill"        data-lp="N0C" onclick="setLoopProduct(this)">Composite</button>
+      <button class="loop-pill"        data-lp="EET" onclick="setLoopProduct(this)">Echo Tops</button>
       <button class="loop-pill"        data-lp="N0U" onclick="setLoopProduct(this)">Velocity</button>
     </div>
     <div class="tab-section-label2">Playback</div>
@@ -1643,6 +1703,112 @@ async function admWipeAllChat(){
   }catch(e){alert('Wipe failed: '+e.message);}
   finally{btn.textContent='⚠ Wipe All Messages Now';btn.disabled=false;}
 }
+</script>
+<!-- MOBILE NAV -->
+<div id="mobile-chaser-nav">
+  <button class="mcnav-btn active" id="mcnav-map" onclick="mcNav('map',this)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+    Map
+  </button>
+  <button class="mcnav-btn" id="mcnav-chasers" onclick="mcNav('chasers',this)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Chasers
+  </button>
+  <button class="mcnav-btn" id="mcnav-comms" onclick="mcNav('chat',this)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Comms
+  </button>
+  <button class="mcnav-btn" id="mcnav-alerts" onclick="mcNav('alerts',this)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    Alerts
+  </button>
+  <button class="mcnav-btn" id="mcnav-layers" onclick="mcNav('layers',this)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+    Layers
+  </button>
+</div>
+
+<!-- MOBILE SHEET -->
+<div id="mobile-chaser-sheet">
+  <div id="mcs-handle"></div>
+  <div id="mcs-tabs">
+    <button class="mcstab active" onclick="mcSheet('content',this)">Content</button>
+    <button class="mcstab" onclick="mcSheet('layers',this)">Layers</button>
+    <button class="mcstab" onclick="mcSheet('radar',this)">Radar</button>
+  </div>
+  <div id="mcs-content"></div>
+</div>
+
+<script>
+// ── MOBILE CHASER NAV ──
+let mcActiveTab='map';
+function mcNav(tab,btn){
+  document.querySelectorAll('.mcnav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); mcActiveTab=tab;
+  const sheet=document.getElementById('mobile-chaser-sheet');
+  if(tab==='map'){ sheet.classList.remove('open'); return; }
+  if(tab==='layers'){
+    mcSheet('layers',document.querySelector('.mcstab'));
+    sheet.classList.add('open'); return;
+  }
+  // clone panel tab content into sheet
+  const paneId='ptab-'+tab;
+  const pane=document.getElementById(paneId);
+  if(pane){
+    const content=document.getElementById('mcs-content');
+    content.innerHTML='';
+    // show the tabs row and set active tab in desktop sidebar
+    const tabBtns=document.querySelectorAll('.ptab');
+    tabBtns.forEach(b=>{ if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+tab+"'")) switchPTab(tab,b); });
+    // render content from cloned pane
+    const clone=pane.cloneNode(true);
+    clone.style.display='flex';clone.style.flexDirection='column';
+    clone.removeAttribute('id');
+    content.appendChild(clone);
+    // set content tab active
+    document.querySelector('.mcstab').click();
+  }
+  sheet.classList.add('open');
+}
+function mcSheet(name,btn){
+  document.querySelectorAll('.mcstab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const content=document.getElementById('mcs-content');
+  if(name==='layers'){
+    content.innerHTML=`<div id="mobile-map-controls">
+      <div class="m-row-label">Base Map</div>
+      <div class="m-btn-row">
+        <button class="${activeBase==='dark'?'active':''}" onclick="setLayer('dark');this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Dark</button>
+        <button class="${activeBase==='sat'?'active':''}" onclick="setLayer('sat');this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Satellite</button>
+        <button class="${activeBase==='clean'?'active':''}" onclick="setLayer('clean');this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Minimal</button>
+      </div>
+    </div>`;
+  } else if(name==='radar'){
+    content.innerHTML=`<div id="mobile-map-controls">
+      <div class="m-row-label">Radar Product</div>
+      <div class="m-btn-row">
+        <button class="${radarProd==='N0Q'?'active':''}" onclick="setRadarProd({dataset:{p:'N0Q'},classList:{remove:()=>{},add:()=>{},toggle:()=>{}}});this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">N0Q</button>
+        <button class="${radarProd==='EET'?'active':''}" onclick="setRadarProd({dataset:{p:'EET'},classList:{remove:()=>{},add:()=>{},toggle:()=>{}}});this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">EET</button>
+        <button class="${radarProd==='N0U'?'active':''}" onclick="setRadarProd({dataset:{p:'N0U'},classList:{remove:()=>{},add:()=>{},toggle:()=>{}}});this.parentNode.querySelectorAll('button').forEach(b=>b.classList.remove('active'));this.classList.add('active')">N0U</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:0 2px;">
+        <span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Opacity</span>
+        <input type="range" min="10" max="100" value="80" style="flex:1;accent-color:var(--green);" oninput="radarOpacity=this.value/100;if(radarLayer)radarLayer.setOpacity(radarOpacity)">
+      </div>
+      <div style="margin-top:10px;">
+        <button onclick="toggleRadar()" style="width:100%;padding:8px;background:rgba(0,255,65,.08);border:1px solid var(--green);color:var(--green);font-family:var(--font-head);font-size:12px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Toggle Radar</button>
+      </div>
+    </div>`;
+  }
+}
+// swipe down to close
+(()=>{
+  let sy=0;
+  const s=document.getElementById('mobile-chaser-sheet');
+  if(!s)return;
+  s.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;},{passive:true});
+  s.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-sy>60)s.classList.remove('open');},{passive:true});
+})();
 </script>
 </body>
 </html>
