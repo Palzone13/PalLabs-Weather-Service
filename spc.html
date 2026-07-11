@@ -130,6 +130,44 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .lbtn:hover{border-color:var(--cyan-dim);color:var(--text);}
 .lbtn.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,.06);}
 
+/* ── MOBILE ── */
+@media(max-width:768px){
+  #map{right:0!important;bottom:54px!important;}
+  #panel{display:none!important;}
+  #statusbar{display:none!important;}
+  #layer-ctrl{display:none!important;}
+  #legend{display:none!important;}
+  #mobile-spc-nav{display:flex!important;}
+  #mobile-spc-sheet{display:flex!important;}
+}
+#mobile-spc-nav{
+  display:none;position:fixed;bottom:0;left:0;right:0;height:54px;
+  background:var(--surface);border-top:1px solid var(--border);
+  z-index:800;align-items:stretch;
+}
+.msnav-btn{
+  flex:1;background:none;border:none;border-right:1px solid var(--border);
+  color:var(--muted);font-family:var(--font-head);font-size:9px;letter-spacing:1px;
+  text-transform:uppercase;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:color .2s;
+}
+.msnav-btn:last-child{border-right:none;}
+.msnav-btn.active{color:var(--cyan);}
+.msnav-btn svg{opacity:.6;}
+.msnav-btn.active svg{opacity:1;}
+#mobile-spc-sheet{
+  display:none;position:fixed;bottom:54px;left:0;right:0;z-index:700;
+  background:var(--surface);border-top:2px solid var(--cyan);
+  flex-direction:column;max-height:65vh;
+  transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);
+}
+#mobile-spc-sheet.open{transform:translateY(0);}
+#mspc-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:8px auto 4px;flex-shrink:0;}
+#mspc-content{flex:1;overflow-y:auto;padding:8px;}
+#mspc-content::-webkit-scrollbar{width:3px;}
+#mspc-content::-webkit-scrollbar-thumb{background:var(--border);}
+
 /* STATUSBAR */
 #statusbar{
   position:fixed;bottom:0;left:0;right:320px;height:24px;
@@ -282,8 +320,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <script>
 // ══ CONFIG ══
 const SPC_BASE='https://www.spc.noaa.gov/products/outlook';
-// Proxy fallback for CORS — use allorigins as a last resort
-const PROXY='https://api.allorigins.win/raw?url=';
 
 // SPC official colors
 const CAT_COLORS={
@@ -350,26 +386,51 @@ function switchTab(name,btn){
 }
 
 // ══ FETCH WITH CORS FALLBACK ══
+// Force-hide overlay after 8 seconds no matter what
+setTimeout(()=>document.getElementById('loading-overlay').classList.add('hidden'), 8000);
+
 async function fetchGeoJSON(url){
+  // 1. Try direct
   try{
-    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    const r=await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(5000)});
     if(!r.ok) throw new Error('HTTP '+r.status);
     return await r.json();
-  }catch(e){
-    // Try AllOrigins proxy as fallback
-    console.warn('Direct fetch failed, trying proxy:',e.message);
-    const r2=await fetch(PROXY+encodeURIComponent(url));
-    if(!r2.ok) throw new Error('Proxy also failed');
-    return await r2.json();
-  }
+  }catch(e){ console.warn('Direct failed:',e.message); }
+
+  // 2. Try corsproxy.io (most reliable free proxy)
+  try{
+    const r=await fetch('https://corsproxy.io/?'+encodeURIComponent(url),{signal:AbortSignal.timeout(6000)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){ console.warn('corsproxy failed:',e.message); }
+
+  // 3. Try allorigins
+  try{
+    const r=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url),{signal:AbortSignal.timeout(6000)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){ console.warn('allorigins failed:',e.message); }
+
+  throw new Error('All fetch attempts failed — CORS blocked by SPC server');
+}
+
+// ══ SPC TILE FALLBACK (always works, no CORS) ══
+let spcTileLayer=null;
+function addSPCTileLayer(){
+  if(spcTileLayer)return;
+  spcTileLayer=L.tileLayer(
+    'https://mapservices.weather.noaa.gov/eventdriven/rest/services/outlooks/SPC_wx_outlks/MapServer/tile/{z}/{y}/{x}',
+    {opacity:.65,zIndex:198,attribution:'SPC Outlooks: NOAA/NWS'}
+  ).addTo(map);
 }
 
 // ══ CATEGORICAL OUTLOOK ══
 async function loadCategorical(){
   document.getElementById('cat-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:11px;letter-spacing:1px;">Loading...</div>';
-  // clear old layers
   Object.values(allLayers.cat).forEach(l=>{ if(l._map)map.removeLayer(l); });
   allLayers.cat={};
+  // Always add the tile layer as baseline — it shows something even if GeoJSON fails
+  addSPCTileLayer();
   try{
     const data=await fetchGeoJSON(`${SPC_BASE}/day1otlk_cat.nolyr.geojson`);
     const cards=[];
@@ -430,7 +491,12 @@ async function loadCategorical(){
     });
     document.getElementById('loading-overlay').classList.add('hidden');
   }catch(e){
-    document.getElementById('cat-list').innerHTML=`<div style="text-align:center;padding:20px;color:#ff4444;font-size:11px;">Failed to load: ${e.message}</div>`;
+    document.getElementById('cat-list').innerHTML=`
+      <div style="padding:14px;font-size:11px;color:var(--muted);line-height:1.6;">
+        <div style="color:#ffcc00;font-weight:700;letter-spacing:1px;margin-bottom:8px;">⚠ GeoJSON Unavailable</div>
+        SPC's servers are blocking the data request (CORS). The official SPC outlook tile overlay is shown on the map instead — it updates automatically from NOAA.<br><br>
+        <a href="https://www.spc.noaa.gov/products/outlook/day1otlk.html" target="_blank" style="color:var(--cyan);">View full outlook on SPC ↗</a>
+      </div>`;
     document.getElementById('loading-overlay').classList.add('hidden');
   }
 }
@@ -591,6 +657,75 @@ function formatSPCTime(t){
 loadCategorical();
 // auto-refresh every 30 minutes
 setInterval(loadCategorical, 30*60*1000);
+</script>
+<!-- MOBILE SPC NAV -->
+<div id="mobile-spc-nav">
+  <button class="msnav-btn active" id="msnav-map" onclick="msNav('map',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+    Map
+  </button>
+  <button class="msnav-btn" id="msnav-cat" onclick="msNav('cat',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+    Cat
+  </button>
+  <button class="msnav-btn" id="msnav-torn" onclick="msNav('torn',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 4H3l7 7v6l4 2V11l7-7z"/></svg>
+    Tornado
+  </button>
+  <button class="msnav-btn" id="msnav-wind" onclick="msNav('wind',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+    Wind
+  </button>
+  <button class="msnav-btn" id="msnav-hail" onclick="msNav('hail',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="8" y1="20" x2="8.01" y2="20"/><line x1="12" y1="18" x2="12.01" y2="18"/><line x1="12" y1="22" x2="12.01" y2="22"/><line x1="16" y1="16" x2="16.01" y2="16"/><line x1="16" y1="20" x2="16.01" y2="20"/></svg>
+    Hail
+  </button>
+  <button class="msnav-btn" id="msnav-disc" onclick="msNav('disc',this)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    Discuss
+  </button>
+</div>
+
+<!-- MOBILE SPC SHEET -->
+<div id="mobile-spc-sheet">
+  <div id="mspc-handle"></div>
+  <div id="mspc-content"></div>
+</div>
+
+<script>
+// ── MOBILE SPC ──
+function msNav(tab, btn){
+  document.querySelectorAll('.msnav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const sheet=document.getElementById('mobile-spc-sheet');
+  if(tab==='map'){ sheet.classList.remove('open'); return; }
+  const content=document.getElementById('mspc-content');
+  // mirror the desktop tab switch
+  const desktopTabBtns=document.querySelectorAll('.ptab');
+  desktopTabBtns.forEach(b=>{ if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+tab+"'")) switchTab(tab,b); });
+  // clone content into sheet
+  const pane=document.getElementById('ppane-'+tab);
+  if(pane){
+    content.innerHTML='';
+    const clone=pane.cloneNode(true);
+    clone.style.display='flex'; clone.style.flexDirection='column';
+    clone.removeAttribute('id');
+    // trigger load for hazard tabs
+    if(tab==='torn'||tab==='wind'||tab==='hail') loadHazard(tab);
+    if(tab==='disc') loadDiscussion();
+    if(tab==='cat'&&Object.keys(allLayers.cat).length===0) loadCategorical();
+    content.appendChild(clone);
+  }
+  sheet.classList.add('open');
+}
+// swipe down to close
+(()=>{
+  let sy=0;
+  const s=document.getElementById('mobile-spc-sheet');
+  if(!s)return;
+  s.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;},{passive:true});
+  s.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-sy>60)s.classList.remove('open');},{passive:true});
+})();
 </script>
 </body>
 </html>
