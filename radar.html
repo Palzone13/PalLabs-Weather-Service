@@ -654,7 +654,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   </div>
   <div class="ui-panel-body" id="radar-ctrl-body">
     <button class="radar-product-btn active" data-product="N0Q" onclick="setRadarProduct(this)">Base Reflectivity <span class="tag">N0Q</span></button>
-    <button class="radar-product-btn"        data-product="N0C" onclick="setRadarProduct(this)">Composite Reflect. <span class="tag">N0C</span></button>
+    <button class="radar-product-btn"        data-product="EET" onclick="setRadarProduct(this)">Echo Tops <span class="tag">EET</span></button>
     <button class="radar-product-btn"        data-product="N0U" onclick="setRadarProduct(this)">Base Velocity <span class="tag">N0U</span></button>
     <div id="radar-opacity-row">
       <label>Opacity</label>
@@ -723,7 +723,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div class="tab-section-label">Product</div>
     <div id="loop-product-pills">
       <button class="loop-pill active" data-lp="N0Q" onclick="setLoopProduct(this)">Base Refl.</button>
-      <button class="loop-pill"        data-lp="N0C" onclick="setLoopProduct(this)">Composite</button>
+      <button class="loop-pill"        data-lp="EET" onclick="setLoopProduct(this)">Echo Tops</button>
       <button class="loop-pill"        data-lp="N0U" onclick="setLoopProduct(this)">Velocity</button>
     </div>
     <div class="tab-section-label">Playback</div>
@@ -883,7 +883,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div id="msc-radar" style="padding:10px;display:none;flex-direction:column;gap:8px;">
       <div style="display:flex;gap:6px;">
         <button class="radar-product-btn active" data-product="N0Q" style="flex:1;" onclick="setRadarProduct(this)">N0Q</button>
-        <button class="radar-product-btn" data-product="N0C" style="flex:1;" onclick="setRadarProduct(this)">N0C</button>
+        <button class="radar-product-btn" data-product="EET" style="flex:1;" onclick="setRadarProduct(this)">EET</button>
         <button class="radar-product-btn" data-product="N0U" style="flex:1;" onclick="setRadarProduct(this)">N0U</button>
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
@@ -1203,9 +1203,9 @@ function updateCount() {
 
 // ══ LIVE RADAR ══
 const RADAR_PRODUCTS = {
-  N0Q:{label:'Base Reflectivity',   url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0Q-0/{z}/{x}/{y}.png'},
-  N0C:{label:'Composite Reflectivity',url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0C-0/{z}/{x}/{y}.png'},
-  N0U:{label:'Base Velocity',        url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0U-0/{z}/{x}/{y}.png'},
+  N0Q:{label:'Base Reflectivity',  url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0Q-0/{z}/{x}/{y}.png'},
+  EET:{label:'Echo Tops',          url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-EET-0/{z}/{x}/{y}.png'},
+  N0U:{label:'Base Velocity',      url:'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0U-0/{z}/{x}/{y}.png'},
 };
 let radarLayer=null, radarOn=true, currentProduct='N0Q', radarOpacity=0.80;
 function buildRadarLayer(p){return L.tileLayer(RADAR_PRODUCTS[p].url,{opacity:radarOpacity,zIndex:200,tileSize:256,attribution:'Radar: IEM RIDGE'});}
