@@ -44,9 +44,9 @@ body::before{
 .brand h1{font-size:30px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:var(--cyan);text-align:center;}
 .brand h1 small{display:block;font-size:11px;color:var(--muted);letter-spacing:5px;font-weight:500;margin-top:4px;}
 
-#menu{display:flex;gap:28px;z-index:1;}
+#menu{display:flex;gap:20px;z-index:1;flex-wrap:wrap;justify-content:center;}
 .menu-btn{
-  width:230px;padding:32px 22px 26px;
+  width:200px;padding:28px 18px 22px;
   background:var(--surface);border:1px solid var(--border);
   display:flex;flex-direction:column;align-items:center;gap:14px;
   cursor:pointer;text-decoration:none;color:var(--text);
@@ -73,13 +73,14 @@ body::before{
 
 #radar-btn{--accent:var(--cyan);}
 #chaser-btn{--accent:var(--green);}
+#spc-btn{--accent:#ff6b00;}
 
 footer{
   position:fixed;bottom:18px;left:0;right:0;text-align:center;z-index:1;
   font-size:10px;color:var(--muted);letter-spacing:2px;font-family:var(--font-mono);text-transform:uppercase;
 }
 
-@media (max-width:520px){
+@media (max-width:700px){
   #menu{flex-direction:column;align-items:center;}
   .menu-btn{width:260px;}
 }
@@ -117,6 +118,18 @@ footer{
     </div>
     <div class="label">Chaser</div>
     <div class="desc">Join the storm chaser network &amp; live comms</div>
+  </a>
+
+  <a class="menu-btn" id="spc-btn" href="spc.html">
+    <div class="icon-wrap">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div class="label">SPC Outlook</div>
+    <div class="desc">Day 1 categorical, tornado, wind &amp; hail outlooks</div>
   </a>
 </div>
 
