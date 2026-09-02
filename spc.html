@@ -19,6 +19,8 @@
   --mdt:#e84040;--high:#ff00ff;
 }
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-head);}
+.dark-tiles{filter:invert(1) hue-rotate(200deg) brightness(.75) contrast(.9) saturate(.5);}
+.clean-tiles{filter:none;}
 
 /* TOPBAR */
 #topbar{
@@ -346,9 +348,9 @@ let activeHazard='cat';
 const map=L.map('map',{zoomControl:false,center:[38,-96],zoom:5});
 L.control.zoom({position:'bottomleft'}).addTo(map);
 const baseLayers={
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'©OpenStreetMap ©CARTO',subdomains:'abcd',maxZoom:19}),
-  sat:  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'©Esri',maxZoom:19}),
-  clean:L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'©OpenStreetMap ©CARTO',subdomains:'abcd',maxZoom:19})
+  dark: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'©OpenStreetMap',subdomains:'abc',maxZoom:19,className:'dark-tiles'}),
+  sat:  L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',{attribution:'©USGS',maxZoom:16}),
+  clean:L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'©OpenStreetMap',subdomains:'abc',maxZoom:19,className:'clean-tiles'})
 };
 baseLayers.dark.addTo(map);
 let activeBase='dark';
@@ -414,23 +416,11 @@ async function fetchGeoJSON(url){
   throw new Error('All fetch attempts failed — CORS blocked by SPC server');
 }
 
-// ══ SPC TILE FALLBACK (always works, no CORS) ══
-let spcTileLayer=null;
-function addSPCTileLayer(){
-  if(spcTileLayer)return;
-  spcTileLayer=L.tileLayer(
-    'https://mapservices.weather.noaa.gov/eventdriven/rest/services/outlooks/SPC_wx_outlks/MapServer/tile/{z}/{y}/{x}',
-    {opacity:.65,zIndex:198,attribution:'SPC Outlooks: NOAA/NWS'}
-  ).addTo(map);
-}
-
 // ══ CATEGORICAL OUTLOOK ══
 async function loadCategorical(){
   document.getElementById('cat-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:11px;letter-spacing:1px;">Loading...</div>';
   Object.values(allLayers.cat).forEach(l=>{ if(l._map)map.removeLayer(l); });
   allLayers.cat={};
-  // Always add the tile layer as baseline — it shows something even if GeoJSON fails
-  addSPCTileLayer();
   try{
     const data=await fetchGeoJSON(`${SPC_BASE}/day1otlk_cat.nolyr.geojson`);
     const cards=[];
@@ -438,12 +428,13 @@ async function loadCategorical(){
     const features=[...(data.features||[])].reverse();
     features.forEach(f=>{
       const p=f.properties||{};
-      const dn=String(p.DN||p.LABEL||'').toUpperCase().trim();
-      const label2=String(p.LABEL2||p.LABEL||dn).toUpperCase().trim();
-      const key=CAT_COLORS[dn]?dn:(CAT_COLORS[label2]?label2:null);
-      if(!key||!f.geometry)return;
+      // DN is a number (0=TSTM,1=MRGL,2=SLGT,3=ENH,4=MDT,5=HIGH)
+      // LABEL is the string we want — use DN map as primary, LABEL as fallback
+      const DN_TO_KEY={0:'TSTM',1:'MRGL',2:'SLGT',3:'ENH',4:'MDT',5:'HIGH'};
+      const key=DN_TO_KEY[p.DN]||String(p.LABEL||p.LABEL2||'').toUpperCase().trim().slice(0,4);
+      const isSig=String(p.LABEL2||p.LABEL||'').includes('SIG');
+      if(!CAT_COLORS[key]||!f.geometry)return;
       const color=CAT_COLORS[key];
-      const isSig=String(p.LABEL2||'').includes('SIG');
       let lyr;
       try{
         const coords=geoToLeaflet(f.geometry);
@@ -465,9 +456,13 @@ async function loadCategorical(){
     // update valid time from properties
     const first=data.features&&data.features[0];
     if(first&&first.properties){
-      const vt=first.properties.VALID||first.properties.EXPIRE||'';
-      if(vt) document.getElementById('valid-time').textContent='Valid: '+formatSPCTime(vt);
-      document.getElementById('sb-issued').textContent=formatSPCTime(vt);
+      const vt=first.properties&&(first.properties.VALID||first.properties.ISSUE||first.properties.EXPIRE||'');
+      if(vt){
+        document.getElementById('valid-time').textContent='Valid: '+formatSPCTime(String(vt));
+        document.getElementById('sb-issued').textContent=formatSPCTime(String(vt));
+      } else {
+        document.getElementById('valid-time').textContent='Valid: Active';
+      }
     }
 
     // render sidebar cards
@@ -521,8 +516,11 @@ async function loadHazard(type){
     const features=[...(data.features||[])].reverse();
     features.forEach(f=>{
       const p=f.properties||{};
-      const dn=String(p.DN||p.LABEL||'').replace('%','').trim();
-      const isSig=String(p.LABEL2||p.LABEL||'').includes('SIG')||String(p.DN||'').includes('SIG');
+      // DN is numeric (2,5,10,15,30,45,60) for probability products
+      // Use DN directly as string key, fall back to LABEL
+      const dnRaw=p.DN!==undefined&&p.DN!==null?String(p.DN):String(p.LABEL||'');
+      const dn=dnRaw.replace('%','').replace('SIG','').trim();
+      const isSig=String(p.LABEL2||p.LABEL||p.DN||'').toString().toUpperCase().includes('SIG');
       const color=colors[dn]||(isSig?'#8080ff':null);
       if(!color||!f.geometry)return;
       let lyr;
