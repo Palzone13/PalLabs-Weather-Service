@@ -18,6 +18,8 @@
   --font-head:'Rajdhani',sans-serif;--font-mono:'JetBrains Mono',monospace;
 }
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-head);}
+.dark-tiles{filter:invert(1) hue-rotate(200deg) brightness(.75) contrast(.9) saturate(.5);}
+.clean-tiles{filter:none;}
 
 /* SCANLINE OVERLAY */
 body::after{
@@ -473,6 +475,39 @@ body::after{
 .nws-card .nc-meta{font-size:10px;color:var(--muted2);font-family:var(--font-mono);}
 .nws-track-arrow{color:var(--green);font-size:10px;font-family:var(--font-mono);margin-top:2px;}
 
+/* ── WX DATA POPUP ── */
+#wx-popup {
+  position: fixed; bottom: 30px; left: 220px; z-index: 700;
+  width: 320px; background: var(--surface); border: 1px solid var(--green-dark);
+  display: none; flex-direction: column;
+}
+#wx-popup.visible { display: flex; }
+#wx-popup-header {
+  padding: 8px 12px; border-bottom: 1px solid var(--green-dark);
+  display: flex; justify-content: space-between; align-items: center;
+}
+#wx-popup-header span { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted2); }
+#wx-popup-close { background: none; border: none; color: var(--muted2); font-size: 16px; cursor: pointer; }
+#wx-popup-close:hover { color: var(--text); }
+#wx-popup-body { padding: 10px 12px; }
+#wx-coords-c { font-family: var(--font-mono); font-size: 10px; color: var(--muted2); margin-bottom: 8px; }
+#wx-current-c { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.wx-stat-c {
+  background: var(--bg); border: 1px solid var(--green-dark);
+  padding: 6px 9px; border-radius: 2px; flex: 1; min-width: 70px;
+}
+.wx-stat-c .cv { font-family: var(--font-mono); font-size: 15px; font-weight: 500; color: var(--green); line-height: 1; }
+.wx-stat-c .cl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted2); margin-top: 2px; }
+.wx-stat-c .cs { font-size: 9px; color: var(--muted2); margin-top: 1px; }
+#wx-chart-wrap-c { height: 100px; }
+#wx-loading-c { font-size: 11px; color: var(--muted2); text-align: center; padding: 16px; font-family: var(--font-mono); }
+#wx-hint-c {
+  position: fixed; bottom: 30px; right: 330px; z-index: 600;
+  background: rgba(4,6,8,.9); border: 1px solid var(--green-dark);
+  font-size: 10px; color: var(--muted2); padding: 5px 10px; letter-spacing: 1px;
+  font-family: var(--font-mono); pointer-events: none; display: none;
+}
+
 /* ADMIN AUTH MODAL */
 #admin-auth-overlay{
   position:fixed;inset:0;z-index:3500;background:rgba(0,0,0,.85);
@@ -890,9 +925,9 @@ setInterval(tickClock,1000);tickClock();
 const map=L.map('map',{zoomControl:false,center:[38.5,-96],zoom:5});
 L.control.zoom({position:'bottomleft'}).addTo(map);
 const baseLayers={
-  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'©OpenStreetMap ©CARTO',subdomains:'abcd',maxZoom:19}),
-  sat:  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'©Esri',maxZoom:19}),
-  clean:L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'©OpenStreetMap ©CARTO',subdomains:'abcd',maxZoom:19})
+  dark: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'©OpenStreetMap',subdomains:'abc',maxZoom:19,className:'dark-tiles'}),
+  sat:  L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',{attribution:'©USGS',maxZoom:16}),
+  clean:L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'©OpenStreetMap',subdomains:'abc',maxZoom:19,className:'clean-tiles'})
 };
 baseLayers.dark.addTo(map);
 let activeBase='dark';
@@ -1450,17 +1485,12 @@ async function loadNWSWarnings(){
       lyr.bindPopup(`<div class="lp-type" style="color:${w.evMap.color}">${esc(w.evMap.label)}</div><div class="lp-title">${esc(w.area.split(';')[0].trim())}</div>${motion?`<div style="color:${w.evMap.color};font-family:var(--font-mono);font-size:11px;margin:4px 0">${motion}</div>`:''}<div class="lp-meta">Expires: ${exp}</div>`);
       lyr.addTo(map); nwsLayers.push(lyr); w._layer=lyr;
     });
-    // NWS official tile overlay
-    const tl=L.tileLayer('https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',{opacity:.55,zIndex:199,attribution:'NWS'}).addTo(map);
-    nwsLayers.push(tl);
     renderNWSList();
     document.getElementById('nwsspc-last-update').textContent=`NWS: ${nwsData.length} warnings · ${new Date().toUTCString().slice(17,22)}Z`;
   }catch(e){
-    console.warn('NWS GeoJSON failed, tile fallback:', e.message);
-    const tl=L.tileLayer('https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/MapServer/tile/{z}/{y}/{x}',{opacity:.7,zIndex:199,attribution:'NWS'}).addTo(map);
-    nwsLayers.push(tl);
-    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:var(--amber);font-size:11px;letter-spacing:1px;">GeoJSON unavailable — showing NWS tile overlay</div>`;
-    document.getElementById('nwsspc-last-update').textContent=`NWS tile overlay · ${new Date().toUTCString().slice(17,22)}Z`;
+    console.warn('NWS GeoJSON failed:', e.message);
+    document.getElementById('nwsspc-list').innerHTML=`<div style="text-align:center;padding:20px;color:var(--amber);font-size:11px;letter-spacing:1px;">NWS data unavailable. Try again shortly.</div>`;
+    document.getElementById('nwsspc-last-update').textContent=`Failed · ${new Date().toUTCString().slice(17,22)}Z`;
   }
   btn.textContent='⟳ NWS'; btn.disabled=false;
 }
