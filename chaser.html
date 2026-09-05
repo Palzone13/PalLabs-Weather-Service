@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -679,9 +680,9 @@ body::after{
     <button id="radar-onoff" onclick="toggleRadar()">ON</button>
   </div>
   <div id="radar-products">
-    <button class="rprod active" data-p="N0Q" onclick="setRadarProd(this)">Base Refl. <span class="rtag">N0Q</span></button>
-    <button class="rprod"        data-p="EET" onclick="setRadarProd(this)">Echo Tops  <span class="rtag">EET</span></button>
-    <button class="rprod"        data-p="N0U" onclick="setRadarProd(this)">Velocity   <span class="rtag">N0U</span></button>
+    <button class="rprod active" data-p="2" onclick="setRadarProd(this)">Standard <span class="rtag">Global</span></button>
+    <button class="rprod"        data-p="6" onclick="setRadarProd(this)">Titan    <span class="rtag">Global</span></button>
+    <button class="rprod"        data-p="3" onclick="setRadarProd(this)">Universal<span class="rtag">Global</span></button>
   </div>
   <div id="radar-opacity-row">
     <label>Opacity</label>
@@ -748,9 +749,9 @@ body::after{
   <div class="ptab-pane" id="ptab-loop" style="padding:12px;gap:10px;overflow-y:auto;">
     <div class="tab-section-label2">Product</div>
     <div id="loop-product-pills">
-      <button class="loop-pill active" data-lp="N0Q" onclick="setLoopProduct(this)">Base Refl.</button>
-      <button class="loop-pill"        data-lp="EET" onclick="setLoopProduct(this)">Echo Tops</button>
-      <button class="loop-pill"        data-lp="N0U" onclick="setLoopProduct(this)">Velocity</button>
+      <button class="loop-pill active" data-lp="2" onclick="setLoopProduct(this)">Standard</button>
+      <button class="loop-pill"        data-lp="6" onclick="setLoopProduct(this)">Titan</button>
+      <button class="loop-pill"        data-lp="3" onclick="setLoopProduct(this)">Universal</button>
     </div>
     <div class="tab-section-label2">Playback</div>
     <div id="loop-scrubber-wrap">
@@ -866,6 +867,21 @@ body::after{
   </div>
 </div>
 
+<!-- WX DATA POPUP -->
+<div id="wx-popup">
+  <div id="wx-popup-header">
+    <span>Weather &amp; CAPE Data</span>
+    <button id="wx-popup-close" onclick="closeWxPopup()">✕</button>
+  </div>
+  <div id="wx-popup-body">
+    <div id="wx-loading-c">Loading...</div>
+    <div id="wx-coords-c"></div>
+    <div id="wx-current-c" style="display:none"></div>
+    <div id="wx-chart-wrap-c" style="display:none"><canvas id="wx-chart-c"></canvas></div>
+  </div>
+</div>
+<div id="wx-hint-c">Click map for CAPE &amp; weather data</div>
+
 <!-- STATUS BAR -->
 <div id="statusbar">
   <div class="sitem"><span id="gps-dot"></span><span id="gps-txt">GPS Off</span></div>
@@ -950,7 +966,7 @@ function switchPTab(name,btn){
   if(name==='loop'){
     // pause live radar, preload loop frames
     if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
-    preloadLoopFrames(loopProduct);
+    preloadLoopFrames(rvColorScheme);
   } else {
     // leaving loop tab — stop playback, remove loop layers, restore live radar
     if(loopPlaying)toggleLoopPlay();
@@ -962,21 +978,37 @@ function switchPTab(name,btn){
 }
 
 // ══ RADAR ══
+// ══ LIVE RADAR — RainViewer (global) ══
+let rvHost='https://tilecache.rainviewer.com',rvLatestPath=null,rvPastFrames=[],rvNowcastFrames=[];
+let rvColorScheme=2;
 let radarLayer=null,radarOn=true,radarProd='N0Q',radarOpacity=0.80;
-function buildRadarLayer(p){return L.tileLayer(`https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-${p}-0/{z}/{x}/{y}.png`,{opacity:radarOpacity,zIndex:200,tileSize:256,attribution:'Radar: IEM RIDGE'});}
+async function fetchRainViewer(){
+  try{
+    const r=await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const d=await r.json();
+    rvHost=d.host||rvHost; rvPastFrames=d.radar?.past||[]; rvNowcastFrames=d.radar?.nowcast||[];
+    if(rvPastFrames.length)rvLatestPath=rvPastFrames[rvPastFrames.length-1].path;
+    return true;
+  }catch(e){console.warn('RainViewer:',e);return false;}
+}
+function buildRadarLayer(){
+  if(!rvLatestPath)return null;
+  return L.tileLayer(`${rvHost}${rvLatestPath}/256/{z}/{x}/{y}/${rvColorScheme}/1_1.png`,{opacity:radarOpacity,zIndex:200,tileSize:256,attribution:'RainViewer'});
+}
 function setRadarProd(btn){
   document.querySelectorAll('.rprod').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
-  radarProd=btn.dataset.p;if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
-  if(radarOn){radarLayer=buildRadarLayer(radarProd);radarLayer.addTo(map);}
+  rvColorScheme=parseInt(btn.dataset.p)||2;
+  if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
+  if(radarOn&&rvLatestPath){radarLayer=buildRadarLayer();radarLayer.addTo(map);}
 }
 function toggleRadar(){
   radarOn=!radarOn;const b=document.getElementById('radar-onoff');
-  if(radarOn){b.textContent='ON';b.classList.remove('off');radarLayer=buildRadarLayer(radarProd);radarLayer.addTo(map);}
+  if(radarOn){b.textContent='ON';b.classList.remove('off');if(rvLatestPath){radarLayer=buildRadarLayer();radarLayer.addTo(map);}}
   else{b.textContent='OFF';b.classList.add('off');if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}}
 }
 function setRadarOpacity(v){radarOpacity=v/100;if(radarLayer)radarLayer.setOpacity(radarOpacity);}
-radarLayer=buildRadarLayer(radarProd);radarLayer.addTo(map);
-setInterval(()=>{if(radarOn&&radarLayer){map.removeLayer(radarLayer);radarLayer=buildRadarLayer(radarProd);radarLayer.addTo(map);}},5*60*1000);
+(async()=>{await fetchRainViewer();if(radarOn&&rvLatestPath){radarLayer=buildRadarLayer();radarLayer.addTo(map);}})();
+setInterval(async()=>{if(!radarOn)return;await fetchRainViewer();if(radarLayer)map.removeLayer(radarLayer);radarLayer=buildRadarLayer();if(radarLayer)radarLayer.addTo(map);},5*60*1000);
 
 // ══ POLYGONS FROM PLWS ══
 async function loadPolygons(){
@@ -1270,6 +1302,124 @@ function togglePinMode(){
   if(pinMode){btn.classList.add('active');btn.textContent='✕ Cancel Pin';document.getElementById('map').style.cursor='crosshair';}
   else{btn.classList.remove('active');btn.textContent='📍 Pin Report';document.getElementById('map').style.cursor='';}
 }
+// ══ WX / CAPE DATA ══
+let wxChartC=null;
+
+function capeColor(v){
+  if(v>=3500)return{color:'#ff00ff',label:'Extreme'};
+  if(v>=2500)return{color:'#ff3030',label:'Very High'};
+  if(v>=1000)return{color:'#ff6b00',label:'High'};
+  if(v>=500) return{color:'#ffcc00',label:'Moderate'};
+  if(v>=100) return{color:'#44cc44',label:'Marginal'};
+  return{color:'var(--muted2)',label:'Stable'};
+}
+function degToCompass(deg){
+  const d=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return d[Math.round((deg||0)/22.5)%16];
+}
+
+// Show wx hint once user has joined
+function showWxHint(){document.getElementById('wx-hint-c').style.display='block';}
+
+function closeWxPopup(){
+  document.getElementById('wx-popup').classList.remove('visible');
+  if(wxChartC){wxChartC.destroy();wxChartC=null;}
+}
+
+map.on('click', async e=>{
+  if(admDrawing||pinMode)return; // let admin draw and pin handlers take priority
+  const{lat,lng}=e.latlng;
+  const popup=document.getElementById('wx-popup');
+  popup.classList.add('visible');
+  document.getElementById('wx-loading-c').style.display='block';
+  document.getElementById('wx-current-c').style.display='none';
+  document.getElementById('wx-chart-wrap-c').style.display='none';
+  document.getElementById('wx-coords-c').textContent=`${lat.toFixed(4)}°N, ${Math.abs(lng).toFixed(4)}°${lng<0?'W':'E'}`;
+  if(wxChartC){wxChartC.destroy();wxChartC=null;}
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`+
+      `&hourly=temperature_2m,windspeed_10m,winddirection_10m,dewpoint_2m,relativehumidity_2m,precipitation,cape,lifted_index`+
+      `&past_days=1&forecast_days=1&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=UTC`;
+    const data=await(await fetch(url)).json();
+    const h=data.hourly;
+    const now=new Date();
+    const ci=Math.max(0,Math.min(h.time.findIndex(t=>new Date(t+'Z')>=now)-1,h.time.length-1));
+
+    document.getElementById('wx-loading-c').style.display='none';
+
+    const cape=Math.round(h.cape?h.cape[ci]:0);
+    const cc=capeColor(cape);
+    const li=h.lifted_index?h.lifted_index[ci]:null;
+    const liColor=li!==null?(li<=-6?'#ff3030':li<=-3?'#ff6b00':li<=-1?'#ffcc00':'var(--muted2)'):'var(--muted2)';
+    const liLabel=li!==null?(li<=-6?'Ext. Unstable':li<=-3?'Very Unstable':li<=-1?'Unstable':'Stable'):'—';
+    const dew=h.dewpoint_2m?Math.round(h.dewpoint_2m[ci]):null;
+    const dir=degToCompass(h.winddirection_10m[ci]);
+
+    document.getElementById('wx-current-c').style.display='flex';
+    document.getElementById('wx-current-c').innerHTML=`
+      <div class="wx-stat-c" style="border-color:${cc.color}">
+        <div class="cv" style="color:${cc.color};font-size:13px;">${cape.toLocaleString()}</div>
+        <div class="cl">CAPE J/kg</div>
+        <div class="cs" style="color:${cc.color}">${cc.label}</div>
+      </div>
+      ${li!==null?`<div class="wx-stat-c" style="border-color:${liColor}">
+        <div class="cv" style="color:${liColor}">${li.toFixed(1)}</div>
+        <div class="cl">Lifted Index</div>
+        <div class="cs" style="color:${liColor}">${liLabel}</div>
+      </div>`:''}
+      <div class="wx-stat-c">
+        <div class="cv">${Math.round(h.temperature_2m[ci])}°F</div>
+        <div class="cl">Temp</div>
+      </div>
+      <div class="wx-stat-c">
+        <div class="cv">${Math.round(h.windspeed_10m[ci])}</div>
+        <div class="cl">mph Wind</div>
+        <div class="cs">${dir}</div>
+      </div>
+      ${dew!==null?`<div class="wx-stat-c">
+        <div class="cv">${dew}°F</div>
+        <div class="cl">Dewpoint</div>
+      </div>`:''}
+      <div class="wx-stat-c">
+        <div class="cv">${h.relativehumidity_2m[ci]}%</div>
+        <div class="cl">Humidity</div>
+      </div>
+    `;
+
+    // Chart: CAPE + temp for last 12h + next 12h
+    const s=Math.max(0,ci-11), ef=Math.min(h.time.length,ci+13);
+    const labels=h.time.slice(s,ef).map(t=>t.slice(11,16)+'Z');
+    const capeSlice=(h.cape||[]).slice(s,ef);
+    const tempSlice=h.temperature_2m.slice(s,ef);
+    document.getElementById('wx-chart-wrap-c').style.display='block';
+    const ctx=document.getElementById('wx-chart-c').getContext('2d');
+    wxChartC=new Chart(ctx,{
+      type:'line',
+      data:{
+        labels,
+        datasets:[
+          {label:'CAPE J/kg',data:capeSlice,borderColor:'#ff9900',backgroundColor:'rgba(255,153,0,.12)',borderWidth:1.5,pointRadius:0,fill:true,yAxisID:'y2'},
+          {label:'Temp °F',data:tempSlice,borderColor:'#00ff41',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,yAxisID:'y'}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{
+          legend:{display:true,position:'bottom',labels:{color:'#4a8a4a',font:{family:'JetBrains Mono',size:8},boxWidth:10,padding:6}},
+          tooltip:{mode:'index',intersect:false,bodyFont:{family:'JetBrains Mono',size:9},titleFont:{family:'JetBrains Mono',size:9},callbacks:{title:i=>i[0].label+'Z'}}
+        },
+        scales:{
+          x:{ticks:{color:'#2a5a2a',font:{family:'JetBrains Mono',size:8},maxTicksLimit:8},grid:{color:'#0e1520'}},
+          y:{ticks:{color:'#00ff41',font:{family:'JetBrains Mono',size:8}},grid:{color:'#0e1520'},position:'left'},
+          y2:{ticks:{color:'#ff9900',font:{family:'JetBrains Mono',size:8},maxTicksLimit:5},grid:{display:false},position:'right',display:capeSlice.some(v=>v>0)}
+        }
+      }
+    });
+  }catch(err){
+    document.getElementById('wx-loading-c').textContent='Failed to load weather data.';
+  }
+});
+
 map.on('click',async e=>{
   if(!pinMode||!myCallsign)return;
   const{lat,lng}=e.latlng;
@@ -1304,6 +1454,7 @@ async function joinNetwork(){
     myId=rows[0].id;myCallsign=cs;
     document.getElementById('callsign-modal').style.display='none';
     document.getElementById('my-callsign-badge').textContent=cs;
+    showWxHint();
     // Send join message
     await sbFetch('/plws_chat',{method:'POST',body:JSON.stringify({callsign:cs,message:`${cs} has joined the network.`,type:'system'})});
     // Boot
@@ -1323,36 +1474,43 @@ async function joinNetwork(){
     alert('Failed to join: '+e.message);
   }
 }
-// ══ RADAR LOOP ══
-let loopProduct='N0Q', loopFrame=11, loopPlaying=false, loopTimer=null;
+// ══ RADAR LOOP — RainViewer (global) ══
+let loopProduct='N0Q', loopFrame=0, loopPlaying=false, loopTimer=null;
 const LOOP_FRAMES=12;
-let loopLayers=[], loopPreloading=false;
+let loopLayers=[], loopPreloading=false, loopFrameData=[];
 
-function loopTileUrl(product, minsBack){
-  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-${product}-${minsBack}/{z}/{x}/{y}.png`;
-}
 function getLoopTimeLabel(frameIdx){
-  const minsAgo=(LOOP_FRAMES-1-frameIdx)*5;
-  const d=new Date(Date.now()-minsAgo*60000);
-  return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+'Z  ('+minsAgo+' min ago)';
+  if(loopFrameData[frameIdx]){
+    const d=new Date(loopFrameData[frameIdx].time*1000);
+    const minsAgo=Math.round((Date.now()-d.getTime())/60000);
+    return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0')+'Z  ('+minsAgo+' min ago)';
+  }
+  return '—';
 }
-async function preloadLoopFrames(product){
+async function preloadLoopFrames(cs){
   loopPreloading=true;
   loopLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
-  loopLayers=[];
+  loopLayers=[]; loopFrameData=[];
   const btn=document.getElementById('loop-play-btn');
   btn.disabled=true; btn.textContent='Loading...';
-  document.getElementById('loop-time-display').textContent='Preloading frames…';
-  for(let i=0;i<LOOP_FRAMES;i++){
-    const minsBack=(LOOP_FRAMES-1-i)*5;
-    const lyr=L.tileLayer(loopTileUrl(product,minsBack),{opacity:0,zIndex:201,tileSize:256,attribution:'Radar: IEM RIDGE'});
-    lyr.addTo(map);
-    loopLayers.push(lyr);
-  }
-  setTimeout(()=>{
-    loopPreloading=false;
+  document.getElementById('loop-time-display').textContent='Fetching frames…';
+  if(!rvPastFrames.length) await fetchRainViewer();
+  loopFrameData=[...rvPastFrames,...rvNowcastFrames];
+  if(!loopFrameData.length){
     btn.disabled=false; btn.textContent='▶ Play';
-    showLoopFrame(LOOP_FRAMES-1);
+    document.getElementById('loop-time-display').textContent='No frames';
+    loopPreloading=false; return;
+  }
+  const scrubber=document.getElementById('loop-scrubber');
+  if(scrubber){scrubber.min=0;scrubber.max=loopFrameData.length-1;scrubber.value=loopFrameData.length-1;}
+  document.getElementById('loop-frame-count').textContent=`${loopFrameData.length} frames · global`;
+  loopFrameData.forEach(f=>{
+    const lyr=L.tileLayer(`${rvHost}${f.path}/256/{z}/{x}/{y}/${cs||rvColorScheme}/1_1.png`,{opacity:0,zIndex:201,tileSize:256,attribution:'RainViewer'});
+    lyr.addTo(map); loopLayers.push(lyr);
+  });
+  setTimeout(()=>{
+    loopPreloading=false; btn.disabled=false; btn.textContent='▶ Play';
+    loopFrame=loopFrameData.length-1; showLoopFrame(loopFrame);
   },2000);
 }
 function showLoopFrame(idx){
@@ -1362,7 +1520,7 @@ function showLoopFrame(idx){
   document.getElementById('loop-scrubber').value=idx;
 }
 function scrubLoop(v){if(!loopPreloading)showLoopFrame(parseInt(v));}
-function stepLoop(d){if(!loopPreloading)showLoopFrame(Math.max(0,Math.min(LOOP_FRAMES-1,loopFrame+d)));}
+function stepLoop(d){if(!loopPreloading)showLoopFrame(Math.max(0,Math.min(Math.max(loopLayers.length-1,0),loopFrame+d)));}
 function toggleLoopPlay(){
   if(loopPreloading)return;
   loopPlaying=!loopPlaying;
@@ -1372,15 +1530,15 @@ function toggleLoopPlay(){
 }
 function playLoopTick(){
   if(!loopPlaying)return;
-  showLoopFrame((loopFrame+1)%LOOP_FRAMES);
+  showLoopFrame((loopFrame+1)%Math.max(1,loopLayers.length));
   const spd=parseInt(document.getElementById('loop-speed').value);
   loopTimer=setTimeout(playLoopTick,spd);
 }
 function setLoopProduct(btn){
   document.querySelectorAll('.loop-pill').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); loopProduct=btn.dataset.lp;
+  btn.classList.add('active'); rvColorScheme=parseInt(btn.dataset.lp)||2;
   if(loopPlaying)toggleLoopPlay();
-  preloadLoopFrames(loopProduct);
+  preloadLoopFrames(rvColorScheme);
 }
 
 // ══ STORM REPORTS (chaser) ══
