@@ -229,8 +229,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:var
 
 /* THE NOW PILL — pointed oval from the sketch */
 #rtl-now-pill {
-  position: absolute; right: 0; top: 50%;
-  transform: translate(0, -50%);
+  position: absolute; top: 50%;
   width: 52px; height: 20px;
   border-radius: 50%;
   background: rgba(0,212,255,.15);
@@ -336,9 +335,9 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:var
               <div id="rtl-now-pill" onclick="rtlGoLive()" title="Go to live">now</div>
             </div>
             <div id="rtl-products">
-              <button class="rtl-prod active" data-p="N0Q" onclick="setRtlProd(this)">N0Q</button>
-              <button class="rtl-prod" data-p="EET" onclick="setRtlProd(this)">EET</button>
-              <button class="rtl-prod" data-p="N0U" onclick="setRtlProd(this)">N0U</button>
+              <button class="rtl-prod active" data-p="N0Q" onclick="setRtlProd(this)" title="Standard colors">Standard</button>
+              <button class="rtl-prod" data-p="EET" onclick="setRtlProd(this)" title="Infrared palette">IR</button>
+              <button class="rtl-prod" data-p="N0U" onclick="setRtlProd(this)" title="Rainbow">Rainbow</button>
             </div>
           </div>
           <div id="rtl-ticks"></div>
@@ -476,7 +475,7 @@ function renderForecast(data,lat,lon,name,state,country){
   document.getElementById('loc-coords').textContent=`${lat.toFixed(4)}°N, ${Math.abs(lon).toFixed(4)}°${lon<0?'W':'E'}`;
 
   // ── RADAR MAP ──
-  initForecastMap(lat, lon);
+  initForecastMap(lat, lon, data.hourly);
 
   // ── CURRENT CONDITIONS ──
   const w=wmo(c.weathercode);
@@ -634,79 +633,164 @@ function renderChart(h,ci){
   });
 }
 
-// ── RADAR MAP ──
-const RTL_FRAMES = 12; // 12 × 5min = 60min history
-let fMap = null, fRadarLayers = [], fRtlFrame = RTL_FRAMES;
-let fRtlPlaying = false, fRtlTimer = null, fRtlProd = 'N0Q', fRtlPreloading = false;
+// ── RADAR MAP (RainViewer + 5h precip forecast) ──
+const PAST_HOURS   = 2;   // 2h of history
+const FUTURE_HOURS = 5;   // 5h of forecast shown on timeline
+const TOTAL_HOURS  = PAST_HOURS + FUTURE_HOURS; // 7h total span
+const NOW_PCT      = PAST_HOURS / TOTAL_HOURS;  // where "now" sits on track (~28.6%)
 
-function initForecastMap(lat, lon) {
+let fMap = null;
+let fRvPastLayers = [], fRvNowcastLayers = [];
+let fRvPastFrames = [], fRvNowcastFrames = [];
+let fAllFrames = []; // combined: past + nowcast, each {time, layer, isForecast}
+let fCurFrame = 0;
+let fRtlPlaying = false, fRtlTimer = null;
+let fPrecipForecast = []; // [{minsAhead, prob}] from Open-Meteo, next 5h
+let fRvHost = 'https://tilecache.rainviewer.com';
+
+// ── init map once, then reload frames per location ──
+function initForecastMap(lat, lon, hourlyData) {
   if (!fMap) {
-    fMap = L.map('forecast-map', { zoomControl: true, center: [lat, lon], zoom: 7, attributionControl: false });
+    fMap = L.map('forecast-map', {
+      zoomControl: true, center: [lat, lon], zoom: 7, attributionControl: true
+    });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       subdomains: 'abc', maxZoom: 19, className: 'dark-tiles', attribution: '©OSM'
     }).addTo(fMap);
-    L.control.attribution({ prefix: false }).addTo(fMap);
-    buildRtlTicks();
     initRtlDrag();
   } else {
     fMap.setView([lat, lon], 7);
   }
-  preloadRtlFrames(fRtlProd);
-}
 
-function rtlTileUrl(prod, minsBack) {
-  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-${prod}-${minsBack}/{z}/{x}/{y}.png`;
-}
-function getRtlTimeLabel(frameIdx) {
-  const minsAgo = (RTL_FRAMES - frameIdx) * 5;
-  if (minsAgo === 0) return 'Now (Live)';
-  const d = new Date(Date.now() - minsAgo * 60000);
-  return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'Z  (' + minsAgo + ' min ago)';
-}
-
-async function preloadRtlFrames(prod) {
-  fRtlPreloading = true;
-  fRadarLayers.forEach(l => { try { fMap.removeLayer(l); } catch(e) {} });
-  fRadarLayers = [];
-  document.getElementById('radar-load-status').textContent = 'Preloading frames…';
-  document.getElementById('rtl-play').disabled = true;
-  for (let i = 0; i < RTL_FRAMES; i++) {
-    const minsBack = (RTL_FRAMES - 1 - i) * 5;
-    const lyr = L.tileLayer(rtlTileUrl(prod, minsBack), { opacity: 0, zIndex: 200, tileSize: 256 });
-    lyr.addTo(fMap);
-    fRadarLayers.push(lyr);
+  // pull precip probability for next 5 hours from already-fetched Open-Meteo data
+  fPrecipForecast = [];
+  if (hourlyData && hourlyData.precipitation_probability) {
+    const now = new Date();
+    const ci = hourlyData.time.findIndex(t => new Date(t + 'Z') >= now);
+    for (let i = 0; i < FUTURE_HOURS; i++) {
+      fPrecipForecast.push({
+        minsAhead: i * 60,
+        prob: hourlyData.precipitation_probability[ci + i] || 0
+      });
+    }
   }
-  setTimeout(() => {
-    fRtlPreloading = false;
-    document.getElementById('rtl-play').disabled = false;
-    document.getElementById('radar-load-status').textContent = '60 min history';
-    showRtlFrame(RTL_FRAMES - 1);
-    rtlGoLive();
-  }, 2000);
+
+  loadRainViewer();
 }
 
+// ── fetch RainViewer frame list ──
+async function loadRainViewer() {
+  document.getElementById('radar-load-status').textContent = 'Fetching radar frames…';
+  document.getElementById('rtl-play').disabled = true;
+
+  // tear down old layers
+  [...fRvPastLayers, ...fRvNowcastLayers].forEach(l => { try { fMap.removeLayer(l); } catch(e) {} });
+  fRvPastLayers = []; fRvNowcastLayers = []; fAllFrames = [];
+
+  try {
+    const r = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await r.json();
+    fRvHost = data.host || fRvHost;
+
+    const past     = (data.radar?.past     || []).slice(-12); // last ~2h at 10-min intervals
+    const nowcast  = (data.radar?.nowcast  || []).slice(0, 3); // up to ~30min ahead
+
+    // build Leaflet layers for each frame, all at opacity 0
+    past.forEach(f => {
+      const lyr = L.tileLayer(rvTileUrl(f.path), { opacity: 0, zIndex: 200, tileSize: 256 });
+      lyr.addTo(fMap);
+      fRvPastLayers.push(lyr);
+      fAllFrames.push({ time: f.time * 1000, layer: lyr, isForecast: false });
+    });
+    nowcast.forEach(f => {
+      const lyr = L.tileLayer(rvTileUrl(f.path), { opacity: 0, zIndex: 200, tileSize: 256 });
+      lyr.addTo(fMap);
+      fRvNowcastLayers.push(lyr);
+      fAllFrames.push({ time: f.time * 1000, layer: lyr, isForecast: true });
+    });
+
+    document.getElementById('rtl-play').disabled = false;
+    document.getElementById('radar-load-status').textContent =
+      `${past.length} radar · ${nowcast.length} nowcast · 5h precip forecast`;
+
+    buildRtlTicks();
+    drawFuturePrecipBar();
+
+    // start at "now" — last past frame
+    fCurFrame = fRvPastLayers.length - 1;
+    showRtlFrame(fCurFrame);
+  } catch(e) {
+    document.getElementById('radar-load-status').textContent = 'Radar unavailable';
+    console.warn('RainViewer fetch failed:', e);
+  }
+}
+
+function rvTileUrl(path) {
+  return `${fRvHost}${path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
+
+// ── show a frame ──
 function showRtlFrame(idx) {
-  fRtlFrame = idx;
-  fRadarLayers.forEach((l, i) => l.setOpacity(i === idx ? 0.75 : 0));
-  const label = getRtlTimeLabel(idx);
+  fCurFrame = Math.max(0, Math.min(fAllFrames.length - 1, idx));
+  fAllFrames.forEach((f, i) => f.layer.setOpacity(i === fCurFrame ? 0.75 : 0));
+
+  const frame = fAllFrames[fCurFrame];
+  if (!frame) return;
+
+  const now = Date.now();
+  const diffMin = Math.round((frame.time - now) / 60000);
+  const d = new Date(frame.time);
+  const hh = String(d.getUTCHours()).padStart(2,'0');
+  const mm = String(d.getUTCMinutes()).padStart(2,'0');
+
+  let label;
+  if (Math.abs(diffMin) < 3)      label = `${hh}:${mm}Z — Now`;
+  else if (diffMin < 0)           label = `${hh}:${mm}Z — ${Math.abs(diffMin)} min ago`;
+  else                            label = `${hh}:${mm}Z — NOWCAST +${diffMin} min`;
+
   document.getElementById('rtl-label').textContent = label;
-  // track fill + handle
-  const pct = idx / (RTL_FRAMES - 1) * 100;
+  document.getElementById('rtl-label').style.color = frame.isForecast ? '#ffcc00' : 'var(--cyan)';
+
+  // update handle position on track
+  // map frame time onto the 7-hour track
+  const trackStart = now - PAST_HOURS * 3600000;
+  const trackEnd   = now + FUTURE_HOURS * 3600000;
+  const pct = Math.max(0, Math.min(100, (frame.time - trackStart) / (trackEnd - trackStart) * 100));
   document.getElementById('rtl-fill').style.width = pct + '%';
   document.getElementById('rtl-handle').style.right = (100 - pct) + '%';
-  // now pill glow when live
-  const pill = document.getElementById('rtl-now-pill');
-  if (idx === RTL_FRAMES - 1) pill.classList.add('live');
-  else pill.classList.remove('live');
+
+  // now pill glow
+  const isLive = Math.abs(diffMin) < 8;
+  document.getElementById('rtl-now-pill').classList.toggle('live', isLive);
 }
 
-function rtlGoLive() {
-  if (fRtlPreloading) return;
-  showRtlFrame(RTL_FRAMES - 1);
+// ── draw future precip probability bar on the future portion ──
+function drawFuturePrecipBar() {
+  const existing = document.getElementById('rtl-precip-bar');
+  if (existing) existing.remove();
+
+  const trackWrap = document.getElementById('rtl-track');
+  const bar = document.createElement('div');
+  bar.id = 'rtl-precip-bar';
+  bar.style.cssText = `
+    position:absolute; top:0; height:100%; left:${NOW_PCT*100}%; right:0;
+    display:flex; border-radius:0 2px 2px 0; overflow:hidden; pointer-events:none;
+  `;
+
+  fPrecipForecast.forEach(({ prob }) => {
+    const seg = document.createElement('div');
+    const alpha = prob / 100 * 0.7 + 0.05;
+    const r = prob > 60 ? 74 : prob > 30 ? 255 : 255;
+    const g = prob > 60 ? 158 : prob > 30 ? 204 : 255;
+    const b = prob > 60 ? 255 : prob > 30 ? 0 : 0;
+    seg.style.cssText = `flex:1; background:rgba(${r},${g},${b},${alpha});`;
+    bar.appendChild(seg);
+  });
+  trackWrap.appendChild(bar);
 }
 
+// ── play/pause ──
 function toggleRtlPlay() {
-  if (fRtlPreloading) return;
   fRtlPlaying = !fRtlPlaying;
   const btn = document.getElementById('rtl-play');
   if (fRtlPlaying) { btn.textContent = '⏸'; btn.classList.add('playing'); tickRtl(); }
@@ -714,52 +798,59 @@ function toggleRtlPlay() {
 }
 function tickRtl() {
   if (!fRtlPlaying) return;
-  showRtlFrame((fRtlFrame + 1) % RTL_FRAMES);
+  const next = (fCurFrame + 1) % fAllFrames.length;
+  showRtlFrame(next);
   fRtlTimer = setTimeout(tickRtl, 600);
 }
 
+// ── go to live (last past frame) ──
+function rtlGoLive() {
+  showRtlFrame(fRvPastLayers.length - 1);
+}
+
+// ── radar product buttons (RainViewer uses color param, not product) ──
+// Re-purpose as color scheme switcher
+const RV_COLORS = { N0Q: '2', EET: '6', N0U: '3' };
 function setRtlProd(btn) {
   document.querySelectorAll('.rtl-prod').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active'); fRtlProd = btn.dataset.p;
-  if (fRtlPlaying) toggleRtlPlay();
-  if (fMap) preloadRtlFrames(fRtlProd);
+  btn.classList.add('active');
+  loadRainViewer(); // reload with new color scheme
 }
 
-function buildRtlTicks() {
-  const row = document.getElementById('rtl-ticks'); row.innerHTML = '';
-  for (let i = 0; i <= RTL_FRAMES - 1; i += 2) {
-    const minsAgo = (RTL_FRAMES - 1 - i) * 5;
-    const d = new Date(Date.now() - minsAgo * 60000);
-    const label = minsAgo === 0 ? '' : String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'Z';
-    const pct = i / (RTL_FRAMES - 1) * 100;
-    const tick = document.createElement('div');
-    tick.className = 'rtick'; tick.textContent = label;
-    tick.style.left = pct + '%';
-    row.appendChild(tick);
-  }
-}
-
+// ── drag to scrub ──
 function initRtlDrag() {
   const outer = document.getElementById('rtl-track-outer');
   const track = document.getElementById('rtl-track');
   let dragging = false;
+
   function posToFrame(clientX) {
     const rect = track.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.round(pct * (RTL_FRAMES - 1));
+    // map pct onto the 7-hour window, find closest frame
+    const now = Date.now();
+    const trackStart = now - PAST_HOURS * 3600000;
+    const trackEnd   = now + FUTURE_HOURS * 3600000;
+    const targetTime = trackStart + pct * (trackEnd - trackStart);
+    if (!fAllFrames.length) return 0;
+    let best = 0, bestDiff = Infinity;
+    fAllFrames.forEach((f, i) => {
+      const diff = Math.abs(f.time - targetTime);
+      if (diff < bestDiff) { bestDiff = diff; best = i; }
+    });
+    return best;
   }
+
   function onDown(e) {
     dragging = true;
     if (fRtlPlaying) toggleRtlPlay();
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    showRtlFrame(posToFrame(x));
+    showRtlFrame(posToFrame(e.touches ? e.touches[0].clientX : e.clientX));
   }
   function onMove(e) {
     if (!dragging) return; e.preventDefault();
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    showRtlFrame(posToFrame(x));
+    showRtlFrame(posToFrame(e.touches ? e.touches[0].clientX : e.clientX));
   }
   function onUp() { dragging = false; }
+
   outer.addEventListener('mousedown', onDown);
   outer.addEventListener('touchstart', onDown, { passive: false });
   window.addEventListener('mousemove', onMove);
@@ -768,8 +859,45 @@ function initRtlDrag() {
   window.addEventListener('touchend', onUp);
 }
 
-// Refresh ticks every minute so times stay accurate
+// ── ticks ──
+function buildRtlTicks() {
+  const row = document.getElementById('rtl-ticks');
+  row.innerHTML = '';
+  const now = Date.now();
+  const trackStart = now - PAST_HOURS * 3600000;
+  const trackEnd   = now + FUTURE_HOURS * 3600000;
+  const totalMs    = trackEnd - trackStart;
+
+  // tick every 30 minutes across 7 hours = 14 ticks
+  for (let minsOffset = -PAST_HOURS * 60; minsOffset <= FUTURE_HOURS * 60; minsOffset += 30) {
+    const t = now + minsOffset * 60000;
+    const pct = (t - trackStart) / totalMs * 100;
+    if (pct < 0 || pct > 100) continue;
+    const d = new Date(t);
+    const label = minsOffset === 0 ? '' :
+      String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'Z';
+    const tick = document.createElement('div');
+    tick.className = 'rtick';
+    tick.style.left = pct + '%';
+    tick.style.color = minsOffset > 0 ? '#886600' : 'var(--muted)';
+    tick.textContent = label;
+    row.appendChild(tick);
+  }
+
+  // place "now" pill at NOW_PCT
+  const pill = document.getElementById('rtl-now-pill');
+  pill.style.left = (NOW_PCT * 100) + '%';
+  pill.style.right = 'auto';
+  pill.style.transform = 'translateX(-50%) translateY(-50%)';
+
+  // add FCST label
+  const fcstLbl = document.createElement('div');
+  fcstLbl.style.cssText = `position:absolute;right:0;font-size:9px;font-family:var(--font-mono);color:#886600;letter-spacing:1px;`;
+  fcstLbl.textContent = '▸ FCST';
+  row.appendChild(fcstLbl);
+}
 setInterval(buildRtlTicks, 60000);
+
 
 function degToCompass(deg){
   const dirs=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
