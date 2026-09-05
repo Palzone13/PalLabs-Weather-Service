@@ -222,7 +222,8 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:var
 }
 #rtl-fill { height: 100%; background: var(--cyan); border-radius: 2px; width: 100%; }
 #rtl-handle {
-  position: absolute; top: 50%; right: 0; transform: translate(50%,-50%);
+  position: absolute; top: 50%; left: 0;
+  transform: translate(-50%, -50%);
   width: 12px; height: 12px; border-radius: 50%; background: #fff;
   border: 2px solid var(--cyan); box-shadow: 0 0 6px var(--cyan); cursor: grab; z-index: 3;
 }
@@ -720,6 +721,10 @@ async function loadRainViewer() {
     // force map to fill its container correctly
     if(fMap) fMap.invalidateSize();
 
+    // start at live
+    fCurrentTimestamp = fAllFrames.length > 0 ? fAllFrames[fRvPastLayers.length - 1].time : Date.now();
+    showAtTime(fCurrentTimestamp);
+
     // start at "now" — last past frame
     fCurFrame = fRvPastLayers.length - 1;
     showRtlFrame(fCurFrame);
@@ -733,125 +738,137 @@ function rvTileUrl(path) {
   return `${fRvHost}${path}/256/{z}/{x}/{y}/2/1_1.png`;
 }
 
-// ── show a frame ──
-function showRtlFrame(idx) {
-  fCurFrame = Math.max(0, Math.min(fAllFrames.length - 1, idx));
-  fAllFrames.forEach((f, i) => f.layer.setOpacity(i === fCurFrame ? 0.75 : 0));
+// ── show a frame or future state ──
+let fCurrentTimestamp = Date.now(); // the time the handle represents
 
-  const frame = fAllFrames[fCurFrame];
-  if (!frame) return;
-
+function showAtTime(targetMs) {
+  fCurrentTimestamp = targetMs;
   const now = Date.now();
-  const diffMin = Math.round((frame.time - now) / 60000);
-  const d = new Date(frame.time);
+  const isFuture = targetMs > now + 60000; // >1min ahead = future
+
+  // find closest past radar frame
+  const closestFrame = fAllFrames.reduce((best, f, i) => {
+    return Math.abs(f.time - targetMs) < Math.abs(fAllFrames[best].time - targetMs) ? i : best;
+  }, 0);
+
+  // always show closest available radar frame
+  if (fAllFrames.length > 0) {
+    fAllFrames.forEach((f, i) => f.layer.setOpacity(i === closestFrame ? 0.75 : 0));
+  }
+
+  // update label
+  const d = new Date(targetMs);
   const hh = String(d.getUTCHours()).padStart(2,'0');
   const mm = String(d.getUTCMinutes()).padStart(2,'0');
+  const diffMin = Math.round((targetMs - now) / 60000);
+  const lbl = document.getElementById('rtl-label');
 
-  let label;
-  if (Math.abs(diffMin) < 3)      label = `${hh}:${mm}Z — Now`;
-  else if (diffMin < 0)           label = `${hh}:${mm}Z — ${Math.abs(diffMin)} min ago`;
-  else                            label = `${hh}:${mm}Z — NOWCAST +${diffMin} min`;
+  if (isFuture) {
+    // find precip probability for this hour ahead
+    const hrAhead = Math.min(Math.floor(diffMin / 60), fPrecipForecast.length - 1);
+    const prob = fPrecipForecast[hrAhead] ? fPrecipForecast[hrAhead].prob : 0;
+    const probColor = prob > 60 ? '#4a9eff' : prob > 30 ? '#ffcc00' : 'var(--muted)';
+    lbl.textContent = `${hh}:${mm}Z — FCST +${diffMin}min · ${prob}% precip`;
+    lbl.style.color = '#ffcc00';
+    // show precip probability overlay on map if not already there
+    updatePrecipOverlay(prob, probColor);
+  } else {
+    const minsAgo = Math.abs(diffMin);
+    lbl.textContent = minsAgo < 2 ? `${hh}:${mm}Z — Now` : `${hh}:${mm}Z — ${minsAgo} min ago`;
+    lbl.style.color = 'var(--cyan)';
+    removePrecipOverlay();
+  }
 
-  document.getElementById('rtl-label').textContent = label;
-  document.getElementById('rtl-label').style.color = frame.isForecast ? '#ffcc00' : 'var(--cyan)';
-
-  // update handle position on track
-  // map frame time onto the 7-hour track
+  // update handle + fill on track
   const trackStart = now - PAST_HOURS * 3600000;
   const trackEnd   = now + FUTURE_HOURS * 3600000;
-  const pct = Math.max(0, Math.min(100, (frame.time - trackStart) / (trackEnd - trackStart) * 100));
+  const pct = Math.max(0, Math.min(100, (targetMs - trackStart) / (trackEnd - trackStart) * 100));
   document.getElementById('rtl-fill').style.width = pct + '%';
-  document.getElementById('rtl-handle').style.right = (100 - pct) + '%';
+  document.getElementById('rtl-handle').style.right = 'auto';
+  document.getElementById('rtl-handle').style.left = pct + '%';
+  document.getElementById('rtl-handle').style.transform = 'translate(-50%, -50%)';
 
   // now pill glow
-  const isLive = Math.abs(diffMin) < 8;
-  document.getElementById('rtl-now-pill').classList.toggle('live', isLive);
+  document.getElementById('rtl-now-pill').classList.toggle('live', !isFuture && minsAgo < 8);
 }
 
-// ── draw future precip probability bar on the future portion ──
-function drawFuturePrecipBar() {
-  const existing = document.getElementById('rtl-precip-bar');
-  if (existing) existing.remove();
-
-  const trackWrap = document.getElementById('rtl-track');
-  const bar = document.createElement('div');
-  bar.id = 'rtl-precip-bar';
-  bar.style.cssText = `
-    position:absolute; top:0; height:100%; left:${NOW_PCT*100}%; right:0;
-    display:flex; border-radius:0 2px 2px 0; overflow:hidden; pointer-events:none;
-  `;
-
-  fPrecipForecast.forEach(({ prob }) => {
-    const seg = document.createElement('div');
-    const alpha = prob / 100 * 0.7 + 0.05;
-    const r = prob > 60 ? 74 : prob > 30 ? 255 : 255;
-    const g = prob > 60 ? 158 : prob > 30 ? 204 : 255;
-    const b = prob > 60 ? 255 : prob > 30 ? 0 : 0;
-    seg.style.cssText = `flex:1; background:rgba(${r},${g},${b},${alpha});`;
-    bar.appendChild(seg);
-  });
-  trackWrap.appendChild(bar);
+// ── precip probability overlay on map ──
+let precipRect = null;
+function updatePrecipOverlay(prob, color) {
+  if (!precipRect) {
+    precipRect = L.rectangle([[-90,-180],[90,180]], {
+      color: 'transparent', fillColor: color,
+      fillOpacity: prob / 100 * 0.25,
+      interactive: false, zIndex: 300
+    }).addTo(fMap);
+  } else {
+    precipRect.setStyle({ fillColor: color, fillOpacity: prob / 100 * 0.25 });
+  }
+}
+function removePrecipOverlay() {
+  if (precipRect) { fMap.removeLayer(precipRect); precipRect = null; }
 }
 
-// ── play/pause ──
+function showRtlFrame(idx) {
+  if (fAllFrames.length === 0) return;
+  const frame = fAllFrames[Math.max(0, Math.min(fAllFrames.length - 1, idx))];
+  showAtTime(frame.time);
+}
+
+function rtlGoLive() {
+  // snap to last past frame
+  const lastPast = fRvPastLayers.length - 1;
+  if (fAllFrames[lastPast]) showAtTime(fAllFrames[lastPast].time);
+}
+
+// ── play/pause — loops through all frames + future hours ──
 function toggleRtlPlay() {
   fRtlPlaying = !fRtlPlaying;
   const btn = document.getElementById('rtl-play');
-  if (fRtlPlaying) { btn.textContent = '⏸'; btn.classList.add('playing'); tickRtl(); }
-  else { btn.textContent = '▶'; btn.classList.remove('playing'); clearTimeout(fRtlTimer); }
+  if (fRtlPlaying) {
+    btn.textContent = '⏸'; btn.classList.add('playing');
+    // start from oldest past frame
+    fCurrentTimestamp = fAllFrames.length > 0 ? fAllFrames[0].time : Date.now() - PAST_HOURS * 3600000;
+    tickRtl();
+  } else {
+    btn.textContent = '▶'; btn.classList.remove('playing');
+    clearTimeout(fRtlTimer);
+  }
 }
 function tickRtl() {
   if (!fRtlPlaying) return;
-  const next = (fCurFrame + 1) % fAllFrames.length;
-  showRtlFrame(next);
+  showAtTime(fCurrentTimestamp);
+  const now = Date.now();
+  const end = now + FUTURE_HOURS * 3600000;
+  // advance by ~10 minutes per tick
+  fCurrentTimestamp += 10 * 60000;
+  if (fCurrentTimestamp > end) fCurrentTimestamp = fAllFrames.length > 0 ? fAllFrames[0].time : now - PAST_HOURS * 3600000;
   fRtlTimer = setTimeout(tickRtl, 600);
 }
 
-// ── go to live (last past frame) ──
-function rtlGoLive() {
-  showRtlFrame(fRvPastLayers.length - 1);
-}
-
-// ── radar product buttons (RainViewer uses color param, not product) ──
-// Re-purpose as color scheme switcher
-const RV_COLORS = { N0Q: '2', EET: '6', N0U: '3' };
-function setRtlProd(btn) {
-  document.querySelectorAll('.rtl-prod').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  loadRainViewer(); // reload with new color scheme
-}
-
-// ── drag to scrub ──
+// ── drag scrubber ──
 function initRtlDrag() {
   const outer = document.getElementById('rtl-track-outer');
   const track = document.getElementById('rtl-track');
   let dragging = false;
 
-  function posToFrame(clientX) {
+  function pctToTime(clientX) {
     const rect = track.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    // map pct onto the 7-hour window, find closest frame
     const now = Date.now();
     const trackStart = now - PAST_HOURS * 3600000;
     const trackEnd   = now + FUTURE_HOURS * 3600000;
-    const targetTime = trackStart + pct * (trackEnd - trackStart);
-    if (!fAllFrames.length) return 0;
-    let best = 0, bestDiff = Infinity;
-    fAllFrames.forEach((f, i) => {
-      const diff = Math.abs(f.time - targetTime);
-      if (diff < bestDiff) { bestDiff = diff; best = i; }
-    });
-    return best;
+    return trackStart + pct * (trackEnd - trackStart);
   }
 
   function onDown(e) {
     dragging = true;
     if (fRtlPlaying) toggleRtlPlay();
-    showRtlFrame(posToFrame(e.touches ? e.touches[0].clientX : e.clientX));
+    showAtTime(pctToTime(e.touches ? e.touches[0].clientX : e.clientX));
   }
   function onMove(e) {
     if (!dragging) return; e.preventDefault();
-    showRtlFrame(posToFrame(e.touches ? e.touches[0].clientX : e.clientX));
+    showAtTime(pctToTime(e.touches ? e.touches[0].clientX : e.clientX));
   }
   function onUp() { dragging = false; }
 
@@ -902,6 +919,33 @@ function buildRtlTicks() {
 }
 setInterval(buildRtlTicks, 60000);
 
+
+// ── future precip bar on track ──
+function drawFuturePrecipBar() {
+  const old = document.getElementById('rtl-precip-bar');
+  if (old) old.remove();
+  const track = document.getElementById('rtl-track');
+  if (!track) return;
+  const bar = document.createElement('div');
+  bar.id = 'rtl-precip-bar';
+  bar.style.cssText = `position:absolute;top:0;height:100%;left:${NOW_PCT*100}%;right:0;display:flex;border-radius:0 2px 2px 0;overflow:hidden;pointer-events:none;`;
+  fPrecipForecast.forEach(({prob}) => {
+    const seg = document.createElement('div');
+    const alpha = prob / 100 * 0.65 + 0.05;
+    const col = prob > 60 ? `rgba(74,158,255,${alpha})` : prob > 30 ? `rgba(255,204,0,${alpha})` : `rgba(255,255,255,${alpha * 0.3})`;
+    seg.style.cssText = `flex:1;background:${col};`;
+    bar.appendChild(seg);
+  });
+  track.appendChild(bar);
+}
+
+// ── color scheme switcher ──
+function setRtlProd(btn) {
+  document.querySelectorAll('.rtl-prod').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  removePrecipOverlay();
+  loadRainViewer();
+}
 
 function degToCompass(deg){
   const dirs=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
