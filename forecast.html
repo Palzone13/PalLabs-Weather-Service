@@ -464,6 +464,8 @@ async function loadForecast(lat,lon,name,state,country){
   }
   document.getElementById('main').removeChild(document.getElementById('spin-overlay'));
   document.getElementById('content').style.display='block';
+  // Leaflet needs to recalculate tile positions after the container becomes visible
+  setTimeout(()=>{ if(fMap) fMap.invalidateSize(); }, 50);
 }
 
 function renderForecast(data,lat,lon,name,state,country){
@@ -715,6 +717,8 @@ async function loadRainViewer() {
 
     buildRtlTicks();
     drawFuturePrecipBar();
+    // force map to fill its container correctly
+    if(fMap) fMap.invalidateSize();
 
     // start at "now" — last past frame
     fCurFrame = fRvPastLayers.length - 1;
